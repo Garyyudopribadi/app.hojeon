@@ -10,12 +10,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { supabase } from '../../lib/supabase'
 
 const menuItems = [
-  { title: 'Fire Safety', description: 'Manage fire safety protocols', icon: Flame, path: null },
-  { title: 'Electrical Safety', description: 'Electrical safety guidelines', icon: Zap, path: null },
-  { title: 'Chemical', description: 'Chemical handling procedures', icon: Beaker, path: null },
-  { title: 'Building Safety', description: 'Building safety measures', icon: Building, path: null },
-  { title: 'First Aid Kit', description: 'First aid kit locations', icon: Bandage, path: null },
-  { title: 'Environment', description: 'Environmental policies', icon: Leaf, path: '/compliance/environment' },
+  { title: 'Fire Safety', description: 'Manage fire safety Management', icon: Flame, path: null },
+  { title: 'Electrical Safety', description: 'Electrical safety Management', icon: Zap, path: null },
+  { title: 'Chemical', description: 'Chemical handling Management', icon: Beaker, path: null },
+  { title: 'Building Safety', description: 'Building safety', icon: Building, path: null },
+  { title: 'First Aid Kit', description: 'First aid kit Data Management', icon: Bandage, path: null },
+  { title: 'Environment', description: 'Environmental Data Management', icon: Leaf, path: '/compliance/environment' },
   { title: 'Document Control', description: 'Document management', icon: FileText, path: null },
 ]
 

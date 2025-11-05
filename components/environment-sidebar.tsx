@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useState, useEffect } from "react"
 import {
   BookOpen,
   Bot,
@@ -30,13 +31,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { supabase } from "@/lib/supabase"
 
 const data = {
-  user: {
-    name: "Environment User",
-    email: "env@example.com",
-    avatar: "/avatars/env.jpg",
-  },
   navMain: [
     {
       title: "Air Quality",
@@ -148,6 +145,30 @@ const data = {
 }
 
 export function EnvironmentSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [user, setUser] = useState({
+    name: "Environment User",
+    email: "env@example.com",
+    avatar: "/avatars/env.jpg",
+  })
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (authUser) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('nickname')
+          .eq('id', authUser.id)
+          .maybeSingle()
+        setUser({
+          name: profile?.nickname || "Environment User",
+          email: authUser.email || "env@example.com",
+          avatar: "/avatars/env.jpg",
+        })
+      }
+    }
+    fetchUser()
+  }, [])
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
@@ -173,7 +194,7 @@ export function EnvironmentSidebar({ ...props }: React.ComponentProps<typeof Sid
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   )
