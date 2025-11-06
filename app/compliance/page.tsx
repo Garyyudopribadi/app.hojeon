@@ -3,18 +3,20 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { User, LogOut, Flame, Zap, Beaker, Building, Bandage, Leaf, FileText } from 'lucide-react'
+import { User, LogOut, Flame, Zap, FlaskConical, Building, Ambulance, Leaf, FileText, Info } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu'
 import { supabase } from '../../lib/supabase'
+import { info } from 'console'
 
-const menuItems = [
+  const menuItems = [
+    { title: 'Facility', description: 'Information of Business Site', icon: Info, path: null },
   { title: 'Fire Safety', description: 'Manage fire safety Management', icon: Flame, path: null },
   { title: 'Electrical Safety', description: 'Electrical safety Management', icon: Zap, path: null },
-  { title: 'Chemical', description: 'Chemical handling Management', icon: Beaker, path: null },
+  { title: 'Chemical', description: 'Chemical handling Management', icon: FlaskConical, path: null },
   { title: 'Building Safety', description: 'Building safety', icon: Building, path: null },
-  { title: 'First Aid Kit', description: 'First aid kit Data Management', icon: Bandage, path: null },
+  { title: 'First Aid Kit', description: 'First aid kit Data Management', icon: Ambulance, path: null },
   { title: 'Environment', description: 'Environmental Data Management', icon: Leaf, path: '/compliance/environment' },
   { title: 'Document Control', description: 'Document management', icon: FileText, path: null },
 ]
@@ -101,7 +103,7 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <header className="bg-white/70 backdrop-blur-xl shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-10">
@@ -139,18 +141,22 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-12 px-6 sm:px-8 lg:px-10">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold text-gray-900 mb-3 tracking-tight">Management System</h2>
-          <p className="text-base text-gray-600 max-w-xl mx-auto leading-relaxed">
-            Comprehensive management solutions for your entity
+      <main className="flex-1 max-w-7xl mx-auto py-16 px-6 sm:px-8 lg:px-10">
+        {/* Page Header */}
+        <div className="text-center mb-12">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+            Management System
+          </h1>
+          <p className="text-gray-600 text-sm md:text-base">
+            Select a module to manage your compliance and safety operations
           </p>
         </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {menuItems.map((item, index) => {
             const IconComponent = item.icon
             const cardContent = (
-              <Card className="group relative overflow-hidden bg-white/80 backdrop-blur-sm border border-gray-200/50 shadow-sm hover:shadow-xl hover:bg-white transition-all duration-300 cursor-pointer rounded-2xl hover:scale-[1.02] active:scale-[0.98]">
+              <Card className="group relative overflow-hidden bg-white/80 backdrop-blur-sm border border-gray-200/50 shadow-sm hover:shadow-xl hover:bg-white transition-all duration-300 cursor-pointer rounded-2xl hover:scale-[1.02] active:scale-[0.98] min-h-[140px] flex flex-col">
                 <CardHeader className="pb-4 pt-6">
                   <div className="flex items-center space-x-4">
                     <div className="p-3 rounded-xl bg-gray-100/80 shadow-sm group-hover:bg-gray-200/80 group-hover:shadow-md transition-all duration-300">
@@ -161,7 +167,7 @@ export default function DashboardPage() {
                     </CardTitle>
                   </div>
                 </CardHeader>
-                <CardContent className="pt-0">
+                <CardContent className="pt-0 flex-1 flex items-start">
                   <CardDescription className="text-gray-600 group-hover:text-gray-500 transition-colors text-sm leading-relaxed">
                     {item.description}
                   </CardDescription>
@@ -183,7 +189,7 @@ export default function DashboardPage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white/70 backdrop-blur-xl border-t border-gray-200/50 mt-20">
+      <footer className="bg-white/70 backdrop-blur-xl border-t border-gray-200/50">
         <div className="max-w-7xl mx-auto py-8 px-6 sm:px-8 lg:px-10">
           <p className="text-center text-sm text-gray-600 font-medium">
             © 2025 PT.YONGJIN JAVASUKA GARMENT. All rights reserved. 
