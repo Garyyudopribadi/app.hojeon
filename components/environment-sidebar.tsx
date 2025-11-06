@@ -36,6 +36,25 @@ import { supabase } from "@/lib/supabase"
 const data = {
   navMain: [
     {
+      title: "GHG (Energy Consumption)",
+      url: "#",
+      icon: Leaf,
+      items: [
+        {
+          title: "Raw Data Scope 1",
+          url: "#",
+        },
+        {
+          title: "Raw Data Scope 2",
+          url: "#",
+        },
+        {
+          title: "Raw Data Scope 3",
+          url: "#",
+        },
+      ],
+    },
+    {
       title: "Air Quality",
       url: "#",
       icon: Wind,
@@ -118,11 +137,6 @@ const data = {
       title: "Support",
       url: "#",
       icon: LifeBuoy,
-    },
-    {
-      title: "Feedback",
-      url: "#",
-      icon: Send,
     },
   ],
   projects: [
