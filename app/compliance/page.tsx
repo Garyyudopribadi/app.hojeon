@@ -21,7 +21,7 @@ const menuItems = [
 
 export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [facility, setFacility] = useState('FACILITY NAME')
+  const [entity, setEntity] = useState('ENTITY NAME')
   const [nickname, setNickname] = useState('User Name')
   const [loading, setLoading] = useState(true)
   const router = useRouter()
@@ -36,11 +36,11 @@ export default function DashboardPage() {
           // Fetch profile after auth check
           const { data: profile } = await supabase
             .from('profiles')
-            .select('facility, nickname')
+            .select('entity, nickname')
             .eq('id', user.id)
             .maybeSingle()
           if (profile) {
-            setFacility(profile.facility || 'PT.YONGJIN JAVASUKA GARMENT')
+            setEntity(profile.entity || 'PT.YONGJIN JAVASUKA GARMENT')
             setNickname(profile.nickname || 'Gary Yudo')
           }
           setLoading(false)
@@ -108,7 +108,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-center py-6">
             <div className="space-y-1">
               <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
-                {facility}
+                {entity}
               </h1>
               <p className="text-sm text-gray-500 font-medium" suppressHydrationWarning>
                 {formatDate(currentTime)} • {formatTime(currentTime)}
@@ -143,7 +143,7 @@ export default function DashboardPage() {
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold text-gray-900 mb-3 tracking-tight">Management System</h2>
           <p className="text-base text-gray-600 max-w-xl mx-auto leading-relaxed">
-            Comprehensive management solutions for your facility
+            Comprehensive management solutions for your entity
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
