@@ -21,12 +21,20 @@ const menuItems = [
 
 export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [loading, setLoading] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          router.push('/')
+        } else {
+          setLoading(false)
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error)
         router.push('/')
       }
     }
@@ -67,7 +75,16 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
+        </div>
+      ) : (
+        <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white/70 backdrop-blur-xl shadow-sm border-b border-gray-200/50 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-10">
@@ -158,5 +175,7 @@ export default function DashboardPage() {
         </div>
       </footer>
     </div>
+    )}
+  </>
   )
 }

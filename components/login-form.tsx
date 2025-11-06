@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+import { toast } from "sonner"
 
 export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRef<"form">) {
   const [email, setEmail] = useState("")
@@ -30,7 +31,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       console.log('Sign in result:', { data, error })
 
       if (error) {
-        alert(error.message)
+        toast.error(error.message)
         setLoading(false)
         return
       }
@@ -47,7 +48,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       console.log('Profile fetch result:', { profile, profileError })
 
       if (profileError) {
-        alert('Error fetching profile: ' + profileError.message)
+        toast.error('Error fetching profile: ' + profileError.message)
         setLoading(false)
         return
       }
@@ -62,7 +63,7 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
       }
     } catch (err) {
       console.error('Unexpected error:', err)
-      alert('An unexpected error occurred')
+      toast.error('An unexpected error occurred')
       setLoading(false)
     }
   }
