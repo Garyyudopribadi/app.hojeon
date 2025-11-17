@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useState, useEffect } from "react"
 import {
   BookOpen,
   Bot,
@@ -12,6 +13,15 @@ import {
   Send,
   Settings2,
   SquareTerminal,
+  Leaf,
+  Droplets,
+  Wind,
+  Flame,
+  CircuitBoard,
+  Biohazard,
+  Info,
+  BrickWall,
+  Cross,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -27,72 +37,29 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { supabase } from "@/lib/supabase"
 
 const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   navMain: [
     {
-      title: "Playground",
+      title: "GHG (Energy Consumption)",
       url: "#",
-      icon: SquareTerminal,
-      isActive: true,
+      icon: Leaf,
       items: [
         {
-          title: "History",
+          title: "Raw Data Scope 1",
           url: "#",
         },
         {
-          title: "Starred",
+          title: "Raw Data Scope 2",
           url: "#",
         },
         {
-          title: "Settings",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Models",
-      url: "#",
-      icon: Bot,
-      items: [
-        {
-          title: "Genesis",
+          title: "Raw Data Scope 3",
           url: "#",
         },
         {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
-      items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
+          title: "Quantitative Data Analysis",
           url: "#",
         },
       ],
@@ -107,15 +74,11 @@ const data = {
           url: "#",
         },
         {
-          title: "Team",
+          title: "Notifications",
           url: "#",
         },
         {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
+          title: "Data Sources",
           url: "#",
         },
       ],
@@ -127,32 +90,71 @@ const data = {
       url: "#",
       icon: LifeBuoy,
     },
-    {
-      title: "Feedback",
-      url: "#",
-      icon: Send,
-    },
   ],
   platform: [
     {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
+      name: "Information Facility",
+      url: "/compliance/information",
+      icon: Info,
     },
     {
-      name: "Sales & Marketing",
+      name: "Fire Safety",
       url: "#",
-      icon: PieChart,
+      icon: Flame,
     },
     {
-      name: "Travel",
+      name: "Electrical Safety",
       url: "#",
-      icon: Map,
+      icon: CircuitBoard,
+    },
+    {
+      name: "Chemical Safety",
+      url: "#",
+      icon: Biohazard,
+    },
+    {
+      name: "Building Safety",
+      url: "#",
+      icon: BrickWall,
+    },
+    {
+      name: "First Aid Management",
+      url: "#",
+      icon: Cross,
+    },
+    {
+      name: "Document Management",
+      url: "#",
+      icon: BookOpen,
     },
   ],
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function EnvironmentSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [user, setUser] = useState({
+    name: "Environment User",
+    email: "env@example.com",
+    avatar: "/avatars/env.jpg",
+  })
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (authUser) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('nickname')
+          .eq('id', authUser.id)
+          .maybeSingle()
+        setUser({
+          name: profile?.nickname || "Environment User",
+          email: authUser.email || "env@example.com",
+          avatar: "/avatars/env.jpg",
+        })
+      }
+    }
+    fetchUser()
+  }, [])
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
@@ -161,11 +163,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuButton size="lg" asChild>
               <a href="#">
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Command className="size-4" />
+                  <Leaf className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Acme Inc</span>
-                  <span className="truncate text-xs">Enterprise</span>
+                  <span className="truncate font-medium">Environment</span>
+                  <span className="truncate text-xs">Compliance</span>
                 </div>
               </a>
             </SidebarMenuButton>
@@ -178,7 +180,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   )

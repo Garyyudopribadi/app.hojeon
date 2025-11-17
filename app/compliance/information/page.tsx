@@ -1,11 +1,11 @@
 'use client'
 
 import { useAuth } from '../../../lib/useAuth'
-import EnvironmentPage from "@/components/environment/environment-page"
+import InformationPage from "@/components/information/information-page"
 import Loading from "@/components/ui/loading"
 
 export default function Page() {
   const { loading } = useAuth()
 
-  return loading ? <Loading /> : <EnvironmentPage />
+  return loading ? <Loading /> : <InformationPage />
 }

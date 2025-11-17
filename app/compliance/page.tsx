@@ -11,7 +11,7 @@ import { supabase } from '../../lib/supabase'
 import { info } from 'console'
 
   const menuItems = [
-    { title: 'Facility', description: 'Information of Business Site', icon: Info, path: null },
+    { title: 'Facility', description: 'Information of Business Site', icon: Info, path: '/compliance/information' },
   { title: 'Fire Safety', description: 'Manage fire safety Management', icon: Flame, path: null },
   { title: 'Electrical Safety', description: 'Electrical safety Management', icon: Zap, path: null },
   { title: 'Chemical', description: 'Chemical handling Management', icon: FlaskConical, path: null },
