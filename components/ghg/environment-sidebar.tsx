@@ -4,24 +4,17 @@ import * as React from "react"
 import { useState, useEffect } from "react"
 import {
   BookOpen,
-  Bot,
-  Command,
-  Frame,
   LifeBuoy,
-  Map,
-  PieChart,
-  Send,
   Settings2,
-  SquareTerminal,
   Leaf,
-  Droplets,
-  Wind,
   Flame,
   CircuitBoard,
   Biohazard,
   Info,
   BrickWall,
   Cross,
+  PieChart,
+  Wind,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -42,27 +35,33 @@ import { supabase } from "@/lib/supabase"
 const data = {
   navMain: [
     {
-      title: "GHG (Energy Consumption)",
-      url: "/compliance/environment/ghg",
-      icon: Leaf,
+      title: "Scope 1",
+      url: "/compliance/environment/ghg/scopeone",
+      icon: Flame,
       items: [
         {
-          title: "Raw Data Scope 1",
+          title: "Raw Data",
           url: "/compliance/environment/ghg/scopeone",
         },
-        {
-          title: "Raw Data Scope 2",
-          url: "#",
-        },
-        {
-          title: "Raw Data Scope 3",
-          url: "#",
-        },
-        {
-          title: "Quantitative Data Analysis",
-          url: "#",
-        },
       ],
+    },
+    {
+      title: "Scope 2",
+      url: "#",
+      icon: CircuitBoard,
+      items: [],
+    },
+    {
+      title: "Scope 3",
+      url: "#",
+      icon: Wind,
+      items: [],
+    },
+    {
+      title: "Quantitative Data Analysis",
+      url: "#",
+      icon: PieChart,
+      items: [],
     },
     {
       title: "Settings",
@@ -130,11 +129,11 @@ const data = {
   ],
 }
 
-export function EnvironmentSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function GhgSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [user, setUser] = useState({
-    name: "Environment User",
-    email: "env@example.com",
-    avatar: "/avatars/env.jpg",
+    name: "GHG User",
+    email: "ghg@example.com",
+    avatar: "/avatars/ghg.jpg",
   })
 
   useEffect(() => {
@@ -147,9 +146,9 @@ export function EnvironmentSidebar({ ...props }: React.ComponentProps<typeof Sid
           .eq('id', authUser.id)
           .maybeSingle()
         setUser({
-          name: profile?.nickname || "Environment User",
-          email: authUser.email || "env@example.com",
-          avatar: "/avatars/env.jpg",
+          name: profile?.nickname || "GHG User",
+          email: authUser.email || "ghg@example.com",
+          avatar: "/avatars/ghg.jpg",
         })
       }
     }
@@ -166,8 +165,8 @@ export function EnvironmentSidebar({ ...props }: React.ComponentProps<typeof Sid
                   <Leaf className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Environment</span>
-                  <span className="truncate text-xs">Compliance</span>
+                  <span className="truncate font-medium">GHG</span>
+                  <span className="truncate text-xs">Greenhouse Gas</span>
                 </div>
               </a>
             </SidebarMenuButton>

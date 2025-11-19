@@ -43,7 +43,7 @@ const data = {
   navMain: [
     {
       title: "GHG (Energy Consumption)",
-      url: "/compliance/environment/ghg",
+      url: "compliance/environment/ghg",
       icon: Leaf,
       items: [
         {
