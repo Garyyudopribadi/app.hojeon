@@ -44,7 +44,7 @@ ChartJS.register(
 )
 
 const fuelDensities: Record<string, number> = {
-  'Automotive gasoline (petrol)': 750, // kg/m³
+  'Automotive gasoline (petrol)': 741, // kg/m³
   'Biodiesel': 880,
   'Liquefied Petroleum Gas (LPG)': 520,
   'Gas / Diesel oil': 850,
@@ -55,17 +55,55 @@ const fuelDensities: Record<string, number> = {
 }
 
 const fuelCalorific: Record<string, number> = {
-  'Automotive gasoline (petrol)': 44, // MJ/kg
+  'Automotive gasoline (petrol)': 44.3, // MJ/kg
   'Biodiesel': 37,
   'Liquefied Petroleum Gas (LPG)': 46,
   'Gas / Diesel oil': 43,
   'Automotive gasoline/diesel oil': 43.5,
-  'Industrial Wastes': 20,
+  'Industrial Wastes': 21.756, // updated to Yongjin value
   'Hydrofluorocarbons(HFCs)': 0, // no combustion
   'ETC': 40,
 }
 
-const emissionFactor = 0.0027 // kgCO2eq/MJ, approximate for fossil fuels
+const emissionFactorsCO2: Record<string, number> = {
+  'Automotive gasoline (petrol)': 69300, // kg CO2/TJ
+  'Biodiesel': 65000,
+  'Liquefied Petroleum Gas (LPG)': 63100,
+  'Gas / Diesel oil': 74100,
+  'Automotive gasoline/diesel oil': 71700,
+  'Industrial Wastes': 143000, // updated to match Hojeon
+  'Hydrofluorocarbons(HFCs)': 0,
+  'ETC': 70000,
+}
+
+const emissionFactorsCH4: Record<string, number> = {
+  'Automotive gasoline (petrol)': 3.2, // kg CH4/TJ
+  'Biodiesel': 2.5,
+  'Liquefied Petroleum Gas (LPG)': 1.0,
+  'Gas / Diesel oil': 0.6,
+  'Automotive gasoline/diesel oil': 1.9,
+  'Industrial Wastes': 30, // updated to match Hojeon
+  'Hydrofluorocarbons(HFCs)': 0,
+  'ETC': 3.0,
+}
+
+const emissionFactorsN2O: Record<string, number> = {
+  'Automotive gasoline (petrol)': 0.6, // kg N2O/TJ
+  'Biodiesel': 0.5,
+  'Liquefied Petroleum Gas (LPG)': 0.1,
+  'Gas / Diesel oil': 0.6,
+  'Automotive gasoline/diesel oil': 0.6,
+  'Industrial Wastes': 4, // updated to match Hojeon
+  'Hydrofluorocarbons(HFCs)': 0,
+  'ETC': 0.6,
+}
+
+const hfcGwp: Record<string, number> = {
+  'HFC-410A': 2255.5,
+  'HFC-404A': 3922,
+  'HFC-134a': 1430,
+  'HFC-32675': 575,
+}
 
 type Scope1Record = {
   no: number
@@ -129,7 +167,8 @@ export default function EnvironmentContent() {
         item.entity_name?.toLowerCase().includes(search.toLowerCase()) ||
         item.facility_name?.toLowerCase().includes(search.toLowerCase()) ||
         item.equipment_name?.toLowerCase().includes(search.toLowerCase()) ||
-        item.fuel_type?.toLowerCase().includes(search.toLowerCase())
+        item.fuel_type?.toLowerCase().includes(search.toLowerCase()) ||
+        item.fuel_detail?.toLowerCase().includes(search.toLowerCase())
       
       const matchesYear = filterYear === 'all' || item.data_year?.toString() === filterYear
       const matchesEntity = filterEntity === 'all' || item.entity_name === filterEntity
@@ -180,17 +219,12 @@ export default function EnvironmentContent() {
   }
 
   const chartData = useMemo(() => {
-    const byYear = { 2022: 0, 2023: 0, 2024: 0 }
+    const byYear: Record<number, number> = {}
     filteredData.forEach(item => {
-      byYear[2022] += item.emission_2022 || 0
-      byYear[2023] += item.emission_2023 || 0
-      byYear[2024] += item.emission_2024 || 0
+      const year = item.data_year || 2024
+      byYear[year] = (byYear[year] || 0) + (item.ghg_emissions || 0)
     })
-    return [
-      { year: '2022', emissions: byYear[2022] },
-      { year: '2023', emissions: byYear[2023] },
-      { year: '2024', emissions: byYear[2024] }
-    ]
+    return Object.entries(byYear).map(([year, emissions]) => ({ year, emissions })).sort((a,b) => parseInt(a.year) - parseInt(b.year))
   }, [filteredData])
 
   const paginatedData = useMemo(() => {
@@ -206,7 +240,7 @@ export default function EnvironmentContent() {
     const fuelType = record.fuel_type || ''
     const unit = record.unit || 'kg'
     const density = fuelDensities[fuelType] || 1000
-    const calorific = fuelCalorific[fuelType] || 40
+    const ncv = fuelCalorific[fuelType] || 40 // MJ/kg
     
     // Convert to kg based on unit
     let fuelConsumptionKg = fuelUsage
@@ -216,19 +250,42 @@ export default function EnvironmentContent() {
       fuelConsumptionKg = fuelUsage
     } // else assume kg
     
-    // Energy consumption (MJ)
-    const energyMj = fuelConsumptionKg * calorific
-    
-    // GHG emissions (tCO2eq)
-    const ghgTco2eq = energyMj * emissionFactor / 1000 // convert to tonnes
+    let ghgTco2eq = 0
+    let kgCO2 = 0
+    let kgCH4 = 0
+    let kgN2O = 0
+    let energyMj = 0
+
+    if (fuelType === 'Hydrofluorocarbons(HFCs)') {
+      // Special calculation for HFCs: tCO₂eq = kg HFC × GWP
+      const hfcType = record.fuel_detail || ''
+      const gwp = hfcGwp[hfcType] || 0
+      ghgTco2eq = (fuelConsumptionKg * gwp) / 1000 // tCO2eq
+      // For HFCs, no CO2, CH4, N2O breakdown, energy is 0
+    } else {
+      // Combustion calculation
+      // Energy consumption (MJ)
+      energyMj = fuelConsumptionKg * ncv
+      
+      // Convert to TJ
+      const energyTj = energyMj / 1000000
+      
+      // Emission factors (kg gas/TJ)
+      const efCO2 = emissionFactorsCO2[fuelType] || 70000
+      const efCH4 = emissionFactorsCH4[fuelType] || 3.0
+      const efN2O = emissionFactorsN2O[fuelType] || 0.6
+      
+      // Emissions per gas (kg)
+      kgCO2 = energyTj * efCO2
+      kgCH4 = energyTj * efCH4
+      kgN2O = energyTj * efN2O
+      
+      // GHG emissions (tCO2eq) using GWP AR6
+      ghgTco2eq = (kgCO2 * 1 + kgCH4 * 27 + kgN2O * 273) / 1000
+    }
     
     // Monthly emissions proportional
     const monthlyGhg = fuelUsage > 0 ? monthlyUsage.map(m => (m / fuelUsage) * ghgTco2eq) : Array(12).fill(0)
-    
-    // Breakdown into components (placeholders)
-    const kgCO2 = ghgTco2eq * 1000 * 0.85
-    const kgCH4 = ghgTco2eq * 1000 * 0.10
-    const kgN2O = ghgTco2eq * 1000 * 0.05
     
     const year = record.data_year || 2024
     const result: any = { 
@@ -249,6 +306,10 @@ export default function EnvironmentContent() {
   const handleAddRecord = () => {
     if (!newRecord.entity_name || !newRecord.facility_name || !newRecord.equipment_name || !newRecord.fuel_type) {
       alert('Please select Entity, Facility, Equipment, and Fuel Type')
+      return
+    }
+    if (newRecord.fuel_type === 'Hydrofluorocarbons(HFCs)' && !newRecord.fuel_detail) {
+      alert('Please select HFC Type')
       return
     }
     const maxNo = Math.max(...data.map(item => item.no || 0), 0)
@@ -277,7 +338,7 @@ export default function EnvironmentContent() {
     const byEntity: Record<string, number> = {}
     filteredData.forEach(item => {
       const entity = item.entity_name || 'Unknown'
-      byEntity[entity] = (byEntity[entity] || 0) + (item.emission_2024 || 0)
+      byEntity[entity] = (byEntity[entity] || 0) + (item.ghg_emissions || 0)
     })
     return Object.entries(byEntity).map(([name, value]) => ({ name, value }))
   }, [filteredData])
@@ -313,7 +374,7 @@ export default function EnvironmentContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {filteredData.reduce((sum, item) => sum + (item.emission_2024 || 0), 0).toFixed(2)} tCO2eq
+              {filteredData.reduce((sum, item) => sum + (item.ghg_emissions || 0), 0).toFixed(2)} tCO2eq
             </div>
           </CardContent>
         </Card>
@@ -556,7 +617,7 @@ export default function EnvironmentContent() {
                         value={newRecord.fuel_type} 
                         onValueChange={(value) => {
                           const unit = getUnitsForFuelType(value)
-                          setNewRecord(prev => ({ ...prev, fuel_type: value, unit }))
+                          setNewRecord(prev => ({ ...prev, fuel_type: value, unit, fuel_detail: value === 'Hydrofluorocarbons(HFCs)' ? '' : prev.fuel_detail }))
                         }}
                         required
                       >
@@ -579,6 +640,24 @@ export default function EnvironmentContent() {
                       />
                     </div>
                   </div>
+                  {newRecord.fuel_type === 'Hydrofluorocarbons(HFCs)' && (
+                    <div>
+                      <Label htmlFor="fuel_detail">HFC Type</Label>
+                      <Select 
+                        value={newRecord.fuel_detail || ''} 
+                        onValueChange={(value) => setNewRecord(prev => ({ ...prev, fuel_detail: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select HFC type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.keys(hfcGwp).map((hfc) => (
+                            <SelectItem key={hfc} value={hfc}>{hfc} (GWP: {hfcGwp[hfc]})</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="data_year">Data Year</Label>
@@ -715,7 +794,7 @@ export default function EnvironmentContent() {
                     <TableCell>{item.entity_name}</TableCell>
                     <TableCell>{item.facility_name}</TableCell>
                     <TableCell>{item.equipment_name}</TableCell>
-                    <TableCell>{item.fuel_type}</TableCell>
+                    <TableCell>{item.fuel_type}{item.fuel_detail ? ` (${item.fuel_detail})` : ''}</TableCell>
                     <TableCell>{item.data_year}</TableCell>
                     <TableCell>{item.total_usage?.toFixed(2)}</TableCell>
                     <TableCell>{item.unit}</TableCell>
