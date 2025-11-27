@@ -874,105 +874,88 @@ export default function ScopeOneContent() {
   }, [editingRecord])
 
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 md:p-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Scope One GHG Emissions</h1>
-          <p className="text-muted-foreground">Manage and analyze greenhouse gas emissions data</p>
+    <div className="flex flex-1 flex-col gap-3 sm:gap-4 p-3 sm:p-4 md:p-6">
+      {/* Page Header - Mobile Optimized */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">Scope One GHG Emissions</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Manage and analyze greenhouse gas emissions data</p>
+        </div>
+        <div className="flex items-center justify-center sm:justify-end">
         </div>
       </div>
 
-      {/* Emission Calculation Info Card */}
+      {/* Emission Calculation Info Card - Mobile Optimized */}
       <Card className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/30 dark:to-purple-950/30 border-blue-200 dark:border-blue-800">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900">
-              <svg className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <CardHeader className="pb-2 sm:pb-3">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            <div className="p-1.5 sm:p-2 rounded-lg bg-blue-100 dark:bg-blue-900 flex-shrink-0">
+              <svg className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
-            Emission Calculation Method
+            <span className="truncate">Emission Calculation Method</span>
           </CardTitle>
-          <CardDescription className="text-sm mt-2">
+          <CardDescription className="text-xs sm:text-sm mt-1 sm:mt-2">
             Cara kerja perhitungan emisi GHG Scope One dari input penggunaan bahan bakar
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-2 gap-4">
+        <CardContent className="space-y-3 sm:space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
             <div className="space-y-2">
               <h4 className="font-semibold text-sm text-blue-900 dark:text-blue-300">Input Data (User Entry):</h4>
-              <ul className="text-sm space-y-1 text-muted-foreground">
+              <ul className="text-xs sm:text-sm space-y-1 text-muted-foreground">
                 <li className="flex items-start gap-2">
-                  <span className="text-blue-600 dark:text-blue-400 mt-0.5">•</span>
-                  <span>Penggunaan bahan bakar per bulan (January - December)</span>
+                  <span className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0">•</span>
+                  <span className="leading-relaxed">Penggunaan bahan bakar per bulan (January - December)</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-blue-600 dark:text-blue-400 mt-0.5">•</span>
-                  <span><strong>fuel_usage</strong> = Total dari semua bulan</span>
+                  <span className="text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0">•</span>
+                  <span className="leading-relaxed"><strong>fuel_usage</strong> = Total dari semua bulan</span>
                 </li>
               </ul>
             </div>
             <div className="space-y-2">
               <h4 className="font-semibold text-sm text-purple-900 dark:text-purple-300">Auto Calculation Output:</h4>
-              <ul className="text-sm space-y-1 text-muted-foreground">
+              <ul className="text-xs sm:text-sm space-y-1 text-muted-foreground">
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-600 dark:text-purple-400 mt-0.5">→</span>
-                  <span><strong>fuel_consumption(Kg)</strong> - Berdasarkan densitas bahan bakar</span>
+                  <span className="text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0">→</span>
+                  <span className="leading-relaxed"><strong>fuel_consumption(Kg)</strong> - Berdasarkan densitas bahan bakar</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-600 dark:text-purple-400 mt-0.5">→</span>
-                  <span><strong>energy_consumption(MJ)</strong> - Berdasarkan nilai kalor</span>
+                  <span className="text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0">→</span>
+                  <span className="leading-relaxed"><strong>energy_consumption(MJ)</strong> - Berdasarkan nilai kalor</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-600 dark:text-purple-400 mt-0.5">→</span>
-                  <span><strong>ghg_emissions(tCO2eq)</strong> - Total emisi CO2 ekuivalen</span>
+                  <span className="text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0">→</span>
+                  <span className="leading-relaxed"><strong>ghg_emissions(tCO2eq)</strong> - Total emisi CO2 ekuivalen</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-600 dark:text-purple-400 mt-0.5">→</span>
-                  <span><strong>kgCO2, kgCH4, kgN2O</strong> - Emisi gas individual</span>
+                  <span className="text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0">→</span>
+                  <span className="leading-relaxed"><strong>kgCO2, kgCH4, kgN2O</strong> - Emisi gas individual</span>
                 </li>
               </ul>
             </div>
           </div>
-          <div className="mt-4 p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-blue-200 dark:border-blue-800">
-            <p className="text-xs text-muted-foreground">
+          <div className="p-2 sm:p-3 bg-white/60 dark:bg-gray-800/60 rounded-lg border border-blue-200 dark:border-blue-800">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               <strong className="text-blue-700 dark:text-blue-400">Note:</strong> Setiap jenis bahan bakar memiliki faktor konversi yang berbeda berdasarkan standar IPCC Guidelines for National GHG Inventories.
             </p>
-          </div>
-          <div className="mt-4 p-4 bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 dark:from-amber-950/30 dark:via-yellow-950/30 dark:to-orange-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
-            <h4 className="text-sm font-semibold mb-3 text-amber-900 dark:text-amber-300 flex items-center gap-2">
-              <Calculator className="h-4 w-4" />
-              Contoh Perhitungan (Automotive Gasoline)
-            </h4>
-            <div className="grid md:grid-cols-2 gap-3 text-xs">
-              <div className="space-y-1.5">
-                <p className="text-muted-foreground"><strong>Input:</strong> Fuel Usage = 21.90 ㎥/tahun</p>
-                <p className="text-muted-foreground">Density = 0.741 kg/L</p>
-                <p className="text-muted-foreground">Calorific Value = 44.3 MJ/kg</p>
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-amber-700 dark:text-amber-400"><strong>Output:</strong></p>
-                <p className="text-muted-foreground">• Fuel Consumption = 16,225 kg</p>
-                <p className="text-muted-foreground">• Energy = 718,773 MJ</p>
-                <p className="text-green-700 dark:text-green-400 font-semibold">• Emissions = 49.99 tCO2eq</p>
-              </div>
-            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Chart Card */}
+      {/* Chart Card - Mobile Optimized */}
       <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5" />
-                  GHG Emissions by Fuel Type and {chartViewMode === "yearly" ? "Year" : `Month (${chartSelectedYear})`}
+        <CardHeader className="pb-3 sm:pb-4">
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                  <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                  <span className="truncate">GHG Emissions by Fuel Type and {chartViewMode === "yearly" ? "Year" : `Month (${chartSelectedYear})`}</span>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   {chartViewMode === "yearly"
                     ? "Comprehensive view of all 8 fuel types emissions breakdown"
                     : `Monthly emissions breakdown for year ${chartSelectedYear}`
@@ -981,151 +964,160 @@ export default function ScopeOneContent() {
               </div>
             </div>
 
-            {/* Chart Filters */}
-            <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
+            {/* Chart Filters - Mobile Optimized */}
+            <div className="flex flex-col gap-3 pt-2 border-t">
               <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-muted-foreground">Filters:</span>
+                <Filter className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-muted-foreground">Filters:</span>
               </div>
 
-              {/* Entity Filter */}
-              <Select value={chartFilterEntity} onValueChange={setChartFilterEntity}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Entities" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Entities</SelectItem>
-                  {entities.map(entity => (
-                    <SelectItem key={entity} value={entity}>{entity}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Facility Filter */}
-              <Select value={chartFilterFacility} onValueChange={setChartFilterFacility}>
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="All Facilities" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Facilities</SelectItem>
-                  {chartFacilitiesForEntity.map(facility => (
-                    <SelectItem key={facility} value={facility}>{facility}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Separator orientation="vertical" className="h-8 hidden sm:block" />
-
-              {/* View Mode Toggle */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">View:</span>
-                <div className="flex rounded-lg border p-1 bg-muted/50">
-                  <Button
-                    variant={chartViewMode === "yearly" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setChartViewMode("yearly")}
-                    className="h-7 px-3"
-                  >
-                    Yearly
-                  </Button>
-                  <Button
-                    variant={chartViewMode === "monthly" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setChartViewMode("monthly")}
-                    className="h-7 px-3"
-                  >
-                    Monthly
-                  </Button>
-                </div>
-              </div>
-
-              {/* Year Selector for Monthly View */}
-              {chartViewMode === "monthly" && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-muted-foreground">Year:</span>
-                  <Select value={chartSelectedYear} onValueChange={setChartSelectedYear}>
-                    <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Select Year" />
+              {/* Filter Controls - Mobile Responsive */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Entity Filter */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Entity</label>
+                  <Select value={chartFilterEntity} onValueChange={setChartFilterEntity}>
+                    <SelectTrigger className="w-full h-8 sm:h-9 text-xs sm:text-sm">
+                      <SelectValue placeholder="All Entities" />
                     </SelectTrigger>
                     <SelectContent>
-                      {years.map(year => (
-                        <SelectItem key={year} value={year}>{year}</SelectItem>
+                      <SelectItem value="all">All Entities</SelectItem>
+                      {entities.map(entity => (
+                        <SelectItem key={entity} value={entity}>{entity}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
+
+                {/* Facility Filter */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">Facility</label>
+                  <Select value={chartFilterFacility} onValueChange={setChartFilterFacility}>
+                    <SelectTrigger className="w-full h-8 sm:h-9 text-xs sm:text-sm">
+                      <SelectValue placeholder="All Facilities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Facilities</SelectItem>
+                      {chartFacilitiesForEntity.map(facility => (
+                        <SelectItem key={facility} value={facility}>{facility}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* View Mode Toggle */}
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground">View</label>
+                  <div className="flex rounded-lg border p-0.5 bg-muted/50 h-8 sm:h-9">
+                    <Button
+                      variant={chartViewMode === "yearly" ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => setChartViewMode("yearly")}
+                      className="h-7 px-2 sm:px-3 text-xs flex-1"
+                    >
+                      Yearly
+                    </Button>
+                    <Button
+                      variant={chartViewMode === "monthly" ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => setChartViewMode("monthly")}
+                      className="h-7 px-2 sm:px-3 text-xs flex-1"
+                    >
+                      Monthly
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Year Selector for Monthly View */}
+                {chartViewMode === "monthly" && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Year</label>
+                    <Select value={chartSelectedYear} onValueChange={setChartSelectedYear}>
+                      <SelectTrigger className="w-full h-8 sm:h-9 text-xs sm:text-sm">
+                        <SelectValue placeholder="Select Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {years.map(year => (
+                          <SelectItem key={year} value={year}>{year}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
 
               {/* Clear Filters Button */}
               {(chartFilterEntity !== "all" || chartFilterFacility !== "all") && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setChartFilterEntity("all")
-                    setChartFilterFacility("all")
-                  }}
-                  className="h-7 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3 w-3 mr-1" />
-                  Clear filters
-                </Button>
+                <div className="flex justify-start">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setChartFilterEntity("all")
+                      setChartFilterFacility("all")
+                    }}
+                    className="h-7 text-xs sm:text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Clear filters
+                  </Button>
+                </div>
+              )}
+
+              {/* Active Filters Display */}
+              {(chartFilterEntity !== "all" || chartFilterFacility !== "all") && (
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span className="text-xs text-muted-foreground">Active:</span>
+                  {chartFilterEntity !== "all" && (
+                    <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
+                      Entity: {chartFilterEntity}
+                      <button
+                        onClick={() => setChartFilterEntity("all")}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </Badge>
+                  )}
+                  {chartFilterFacility !== "all" && (
+                    <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
+                      Facility: {chartFilterFacility}
+                      <button
+                        onClick={() => setChartFilterFacility("all")}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </Badge>
+                  )}
+                </div>
               )}
             </div>
-
-            {/* Active Filters Display */}
-            {(chartFilterEntity !== "all" || chartFilterFacility !== "all") && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">Active:</span>
-                {chartFilterEntity !== "all" && (
-                  <Badge variant="secondary" className="text-xs">
-                    Entity: {chartFilterEntity}
-                    <button
-                      onClick={() => setChartFilterEntity("all")}
-                      className="ml-1 hover:text-destructive"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-                {chartFilterFacility !== "all" && (
-                  <Badge variant="secondary" className="text-xs">
-                    Facility: {chartFilterFacility}
-                    <button
-                      onClick={() => setChartFilterFacility("all")}
-                      className="ml-1 hover:text-destructive"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                )}
-              </div>
-            )}
           </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <Skeleton className="h-[500px] w-full" />
+            <Skeleton className="h-[300px] sm:h-[400px] w-full" />
           ) : (
-            <div className="space-y-4">
-              <ChartContainer config={chartConfig} className="h-[400px] w-full">
-                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <div className="space-y-3 sm:space-y-4">
+              <ChartContainer config={chartConfig} className="h-[300px] sm:h-[400px] w-full">
+                <BarChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.3} />
                   <XAxis
                     dataKey="year"
-                    className="text-sm font-semibold"
-                    tick={{ fill: 'hsl(var(--foreground))', fontSize: 13 }}
+                    className="text-xs sm:text-sm font-semibold"
+                    tick={{ fill: 'hsl(var(--foreground))', fontSize: 11 }}
                     tickLine={{ stroke: 'hsl(var(--muted-foreground))' }}
                   />
                   <YAxis
                     className="text-xs"
-                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }}
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                     tickLine={{ stroke: 'hsl(var(--muted-foreground))' }}
                     label={{
                       value: 'Emissions (tCO2eq)',
                       angle: -90,
                       position: 'insideLeft',
-                      style: { fill: 'hsl(var(--foreground))', fontSize: 12, fontWeight: 600 }
+                      style: { fill: 'hsl(var(--foreground))', fontSize: 10, fontWeight: 600 }
                     }}
                   />
                   <ChartTooltip
@@ -1133,9 +1125,9 @@ export default function ScopeOneContent() {
                     cursor={{ fill: 'hsl(var(--muted))', opacity: 0.15 }}
                   />
                   <Legend
-                    wrapperStyle={{ paddingTop: '20px' }}
+                    wrapperStyle={{ paddingTop: '15px', fontSize: '12px' }}
                     iconType="square"
-                    iconSize={12}
+                    iconSize={10}
                   />
                   {fuelTypes.map((fuelType, index) => (
                     <Bar
@@ -1144,7 +1136,7 @@ export default function ScopeOneContent() {
                       stackId="a"
                       fill={FUEL_COLORS[fuelType] || generateColor(index)}
                       name={fuelType}
-                      radius={index === fuelTypes.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                      radius={index === fuelTypes.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]}
                     />
                   ))}
                 </BarChart>
@@ -1416,120 +1408,129 @@ export default function ScopeOneContent() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[80px]">No</TableHead>
-                  <TableHead>Facility</TableHead>
-                  <TableHead>Fuel Type</TableHead>
-                  <TableHead>Year</TableHead>
-                  <TableHead>Classification</TableHead>
-                  <TableHead className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      Fuel Usage
-                      <Fuel className="h-3 w-3 text-muted-foreground" />
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      Emissions (tCO2eq)
-                      <Calculator className="h-3 w-3 text-muted-foreground" />
-                    </div>
-                  </TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  [...Array(5)].map((_, i) => (
-                    <TableRow key={i}>
-                      {[...Array(8)].map((_, j) => (
-                        <TableCell key={j}>
-                          <Skeleton className="h-4 w-full" />
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : paginatedData.length === 0 ? (
+          {/* Mobile Table Container with Horizontal Scroll */}
+          <div className="rounded-md border overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center h-24 text-muted-foreground">
-                      No records found
-                    </TableCell>
+                    <TableHead className="w-[60px] sm:w-[80px] text-xs sm:text-sm sticky left-0 bg-background z-10">No</TableHead>
+                    <TableHead className="min-w-[120px] text-xs sm:text-sm">Facility</TableHead>
+                    <TableHead className="min-w-[140px] text-xs sm:text-sm">Fuel Type</TableHead>
+                    <TableHead className="w-[80px] text-xs sm:text-sm">Year</TableHead>
+                    <TableHead className="min-w-[120px] hidden sm:table-cell text-xs sm:text-sm">Classification</TableHead>
+                    <TableHead className="min-w-[120px] text-right text-xs sm:text-sm">
+                      <div className="flex items-center justify-end gap-1">
+                        Fuel Usage
+                        <Fuel className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground" />
+                      </div>
+                    </TableHead>
+                    <TableHead className="min-w-[140px] text-right text-xs sm:text-sm">
+                      <div className="flex items-center justify-end gap-1">
+                        Emissions (tCO2eq)
+                        <Calculator className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground" />
+                      </div>
+                    </TableHead>
+                    <TableHead className="w-[100px] text-xs sm:text-sm sticky right-0 bg-background z-10 text-center">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  paginatedData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.id}</TableCell>
-                      <TableCell className="max-w-[200px] truncate">{item.facility}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" style={{ borderColor: FUEL_COLORS[item.types_of_fuel] }}>
-                          {item.types_of_fuel}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{item.date_collection}</TableCell>
-                      <TableCell className="max-w-[150px] truncate">{item.own_facility}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <span className="font-mono text-sm">
-                            {parseNumberWithComma(item.fuel_usage).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                          </span>
-                          <span className="text-xs text-muted-foreground">{item.unit}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {parseNumberWithComma(item['ghg_emissions(tCO2eq)']).toFixed(2)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 dark:hover:text-blue-400 transition-colors"
-                            onClick={() => {
-                              setEditingRecord(item)
-                              setIsEditModalOpen(true)
-                            }}
-                          >
-                            <Pencil className="h-3.5 w-3.5 mr-1" />
-                            Edit
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 dark:hover:text-emerald-400 transition-colors"
-                            onClick={() => {
-                              setViewingRecord(item)
-                              setIsViewModalOpen(true)
-                            }}
-                          >
-                            <Eye className="h-3.5 w-3.5 mr-1" />
-                            View
-                          </Button>
-                        </div>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    [...Array(5)].map((_, i) => (
+                      <TableRow key={i}>
+                        {[...Array(8)].map((_, j) => (
+                          <TableCell key={j} className="p-2 sm:p-4">
+                            <Skeleton className="h-3 sm:h-4 w-full" />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : paginatedData.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center h-16 sm:h-24 text-muted-foreground text-xs sm:text-sm">
+                        No records found
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    paginatedData.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium text-xs sm:text-sm p-2 sm:p-4 sticky left-0 bg-background">{item.id}</TableCell>
+                        <TableCell className="max-w-[120px] truncate text-xs sm:text-sm p-2 sm:p-4">{item.facility}</TableCell>
+                        <TableCell className="p-2 sm:p-4">
+                          <Badge variant="outline" style={{ borderColor: FUEL_COLORS[item.types_of_fuel] }} className="text-xs px-1.5 py-0.5">
+                            {item.types_of_fuel}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs sm:text-sm p-2 sm:p-4">{item.date_collection}</TableCell>
+                        <TableCell className="max-w-[120px] truncate hidden sm:table-cell text-xs sm:text-sm p-2 sm:p-4">{item.own_facility}</TableCell>
+                        <TableCell className="text-right text-xs sm:text-sm p-2 sm:p-4">
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="font-mono text-xs sm:text-sm">
+                              {parseNumberWithComma(item.fuel_usage).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{item.unit}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs sm:text-sm p-2 sm:p-4">
+                          {parseNumberWithComma(item['ghg_emissions(tCO2eq)']).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="p-2 sm:p-4 sticky right-0 bg-background">
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 dark:hover:text-blue-400"
+                              onClick={() => {
+                                setEditingRecord(item)
+                                setIsEditModalOpen(true)
+                              }}
+                              title="Edit"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 dark:hover:text-emerald-400"
+                              onClick={() => {
+                                setViewingRecord(item)
+                                setIsViewModalOpen(true)
+                              }}
+                              title="View"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-
-          {/* Pagination */}
+          {/* Mobile-Optimized Pagination */}
           {!loading && filteredTableData.length > 0 && (
-            <div className="flex items-center justify-between px-2 py-4">
-              <div className="text-sm text-muted-foreground">
-                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTableData.length)} of {filteredTableData.length} entries
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 px-2 py-4">
+              <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
+                <span>Showing</span>
+                <span className="font-medium text-foreground">
+                  {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTableData.length)}
+                </span>
+                <span>of</span>
+                <span className="font-medium text-foreground">{filteredTableData.length}</span>
+                <span>entries</span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
+                  className="h-8 px-2 sm:px-3 text-xs sm:text-sm"
                 >
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  Previous
+                  <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline ml-1">Previous</span>
                 </Button>
                 <div className="flex items-center gap-1">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => {
@@ -1544,14 +1545,14 @@ export default function ScopeOneContent() {
                           key={page}
                           variant={currentPage === page ? "default" : "outline"}
                           size="sm"
-                          className="w-9 h-9"
+                          className="w-8 h-8 sm:w-10 sm:h-9 text-xs sm:text-sm px-0 sm:px-3"
                           onClick={() => setCurrentPage(page)}
                         >
                           {page}
                         </Button>
                       )
                     } else if (page === currentPage - 2 || page === currentPage + 2) {
-                      return <span key={page} className="px-1">...</span>
+                      return <span key={page} className="px-1 text-xs sm:text-sm">...</span>
                     }
                     return null
                   })}
@@ -1561,9 +1562,10 @@ export default function ScopeOneContent() {
                   size="sm"
                   onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
+                  className="h-8 px-2 sm:px-3 text-xs sm:text-sm"
                 >
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-1" />
+                  <span className="hidden sm:inline mr-1">Next</span>
+                  <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
                 </Button>
               </div>
             </div>
