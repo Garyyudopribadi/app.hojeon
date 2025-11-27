@@ -38,27 +38,31 @@ export function LoginForm({ className, ...props }: React.ComponentPropsWithoutRe
 
       console.log('Fetching profile for user:', data.user.id)
 
-      // Fetch user profile
+      // Fetch user profile (including department and role)
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, department')
         .eq('id', data.user.id)
         .maybeSingle()
 
       console.log('Profile fetch result:', { profile, profileError })
 
       if (profileError) {
-        toast.error('Error fetching profile: ' + profileError.message)
+        const msg = (profileError as any)?.message || JSON.stringify(profileError)
+        toast.error('Error fetching profile: ' + msg)
         setLoading(false)
         return
       }
 
-      // Check role case-insensitively
-      if (profile && profile.role.toLowerCase() === 'compliance') {
-        console.log('Redirecting to /compliance')
-        window.location.href = '/compliance'
+      // Determine redirect based on department; fallback to /dashboard
+      const dept = profile?.department ? String(profile.department).toLowerCase() : null
+      if (dept) {
+        // sanitize department to simple path segment
+        const safeDept = dept.replace(/[^a-z0-9-_/]/gi, '').replace(/^\/+|\/+$/g, '')
+        console.log('Redirecting to /' + safeDept)
+        window.location.href = '/' + safeDept
       } else {
-        console.log('Redirecting to /dashboard')
+        console.log('No department, redirecting to /dashboard')
         window.location.href = '/dashboard'
       }
     } catch (err) {

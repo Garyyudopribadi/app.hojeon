@@ -1,14 +1,14 @@
-'use client'
+ 'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '../../lib/useAuth'
 import { User, LogOut, Flame, Zap, FlaskConical, Building, Ambulance, Leaf, FileText, Info } from 'lucide-react'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../components/ui/dropdown-menu'
-import { supabase } from '../../lib/supabase'
-import { info } from 'console'
+// auth handled by `useAuth`
 
   const menuItems = [
     { title: 'Facility', description: 'Information of Business Site', icon: Info, path: '/compliance/information' },
@@ -25,43 +25,27 @@ export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [entity, setEntity] = useState('ENTITY NAME')
   const [nickname, setNickname] = useState('User Name')
-  const [loading, setLoading] = useState(true)
+  const [loadingLocal, setLoadingLocal] = useState(true)
   const router = useRouter()
+  const { loading, profile } = useAuth()
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          router.push('/')
-        } else {
-          // Fetch profile after auth check
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('entity, nickname')
-            .eq('id', user.id)
-            .maybeSingle()
-          if (profile) {
-            setEntity(profile.entity || 'PT.YONGJIN JAVASUKA GARMENT')
-            setNickname(profile.nickname || 'Gary Yudo')
-          }
-          setLoading(false)
-        }
-      } catch (error) {
-        console.error('Error:', error)
-        router.push('/')
+    if (!loading) {
+      // populate entity and nickname from profile
+      if (profile) {
+        setEntity(profile.entity || 'PT.YONGJIN JAVASUKA GARMENT')
+        setNickname(profile.nickname || 'Gary Yudo')
+      }
+      setLoadingLocal(false)
+
+      // department guard: if user's department exists and is not 'compliance', redirect
+      const dept = profile?.department ? String(profile.department).toLowerCase() : null
+      if (dept && dept !== 'compliance') {
+        const safeDept = dept.replace(/[^a-z0-9-_/]/gi, '').replace(/^\/+|\/+$/g, '')
+        router.push('/' + safeDept)
       }
     }
-    checkAuth()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        router.push('/')
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [router])
+  }, [loading, profile, router])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -95,7 +79,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      {loading ? (
+      {(loading || loadingLocal) ? (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mx-auto"></div>

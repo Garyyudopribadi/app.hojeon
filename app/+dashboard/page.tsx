@@ -1,8 +1,9 @@
-'use client'
+ 'use client'
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '../../lib/useAuth'
 import { User, LogOut, Flame, Zap, Beaker, Building, Bandage, Leaf, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,33 +22,15 @@ const menuItems = [
 
 export default function DashboardPage() {
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [loading, setLoading] = useState(true)
+  const [loadingLocal, setLoadingLocal] = useState(true)
   const router = useRouter()
+  const { loading, profile } = useAuth()
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          router.push('/')
-        } else {
-          setLoading(false)
-        }
-      } catch (error) {
-        console.error('Error checking auth:', error)
-        router.push('/')
-      }
+    if (!loading) {
+      setLoadingLocal(false)
     }
-    checkAuth()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        router.push('/')
-      }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [router])
+  }, [loading])
 
   useEffect(() => {
     const timer = setInterval(() => {

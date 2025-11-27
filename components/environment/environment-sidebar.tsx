@@ -43,24 +43,20 @@ const data = {
   navMain: [
     {
       title: "GHG (Energy Consumption)",
-      url: "/compliance/environment/ghg",
+      url: "/compliance/environment/ghg/",
       icon: Leaf,
       items: [
         {
           title: "Raw Data Scope 1",
-          url: "/compliance/environment/ghg/scopeone",
+          url: "/compliance/environment/ghg/scope-one",
         },
         {
           title: "Raw Data Scope 2",
-          url: "#",
+          url: "/compliance/environment/ghg/scope-two",
         },
         {
           title: "Raw Data Scope 3",
-          url: "#",
-        },
-        {
-          title: "Quantitative Data Analysis",
-          url: "#",
+          url: "/compliance/environment/ghg/scope-three",
         },
       ],
     },

@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '../../../lib/useAuth'
-import InformationPage from "@/components/information/information-page"
+import { useAuth } from '../../../../../lib/useAuth'
+import ScopeOnePage from "../../../../../components/environment/scope-one-page"
 import Loading from "@/components/ui/loading"
 
 export default function Page() {
@@ -20,5 +20,5 @@ export default function Page() {
     }
   }, [loading, profile, router])
 
-  return loading ? <Loading /> : <InformationPage />
+  return loading ? <Loading /> : <ScopeOnePage />
 }
