@@ -129,7 +129,7 @@ export function calculateEmissions(
 ): EmissionResult {
   // Step 1: Calculate total fuel usage
   const fuelUsage = Object.values(monthlyUsage).reduce((sum, val) => sum + val, 0)
-  
+
   // Step 2: Calculate fuel consumption in kg
   let fuelConsumptionKg = 0
   if (unit === '㎥') {
@@ -161,11 +161,11 @@ export function calculateEmissions(
   } else {
     // For combustion fuels
     const emissionFactors = EMISSION_FACTORS[fuelType as keyof typeof EMISSION_FACTORS] || EMISSION_FACTORS['Automotive gasoline (petrol)']
-    
+
     kgCO2 = energyConsumptionMJ * emissionFactors.CO2
     kgCH4 = energyConsumptionMJ * emissionFactors.CH4
     kgN2O = energyConsumptionMJ * emissionFactors.N2O
-    
+
     // Convert to CO2 equivalent using GWP
     ghgEmissionsTCO2eq = (kgCO2 * GWP.CO2 + kgCH4 * GWP.CH4 + kgN2O * GWP.N2O) / 1000
   }
@@ -191,9 +191,10 @@ export function formatNumber(num: number, decimals: number = 2): string {
 /**
  * Parse monthly usage from string values
  */
-export function parseMonthlyUsage(data: Record<string, string>): MonthlyUsage {
-  const parseValue = (val: string): number => {
-    if (!val) return 0
+export function parseMonthlyUsage(data: Record<string, any>): MonthlyUsage {
+  const parseValue = (val: string | number): number => {
+    if (val === undefined || val === null) return 0
+    if (typeof val === 'number') return val
     // Remove commas and convert to number
     return parseFloat(val.replace(/,/g, '')) || 0
   }

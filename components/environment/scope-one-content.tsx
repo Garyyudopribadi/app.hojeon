@@ -57,6 +57,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { CalendarIcon, Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 
 interface GHGScopeOneData {
@@ -171,6 +172,7 @@ export default function ScopeOneContent() {
   })
   const [editSelectedEntity, setEditSelectedEntity] = useState('')
   const [editSelectedFacility, setEditSelectedFacility] = useState('')
+  const [editLeaseStatusDisplay, setEditLeaseStatusDisplay] = useState<string>('')
   const [editOpenEntityCombobox, setEditOpenEntityCombobox] = useState(false)
   const [editOpenFacilityCombobox, setEditOpenFacilityCombobox] = useState(false)
   const [editCalculatedPreview, setEditCalculatedPreview] = useState({
@@ -184,9 +186,11 @@ export default function ScopeOneContent() {
   })
   const [isEditSaving, setIsEditSaving] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [businessData, setBusinessData] = useState<Array<{ entity: string; facility: string }>>([])
+  // Remove businessData, use unique values from ghg_scopeone data
   const [selectedEntity, setSelectedEntity] = useState('')
   const [selectedFacility, setSelectedFacility] = useState('')
+  const [businessData, setBusinessData] = useState<Array<any>>([])
+  const [leaseStatusDisplay, setLeaseStatusDisplay] = useState<string>('')
   const [selectedYear, setSelectedYear] = useState<Date>()
   const [openEntityCombobox, setOpenEntityCombobox] = useState(false)
   const [openFacilityCombobox, setOpenFacilityCombobox] = useState(false)
@@ -225,23 +229,68 @@ export default function ScopeOneContent() {
     kgCH4: 0,
     kgN2O: 0
   })
-
+  // Reset: Only fetch and show all data from ghg_scopeone, no filters or transforms
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+          // Diagnostic: ensure supabase client exists
+          if (!supabase) {
+            console.error('Supabase client is not initialized (supabase is falsy)')
+          } else if (!process?.env?.NEXT_PUBLIC_SUPABASE_URL || !process?.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+            console.warn('Supabase env vars may be missing: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
+          }
+        setLoading(true)
+        const response = await fetch('/api/ghg/scope-one')
+        const result = await response.json()
+        setData(result.data || [])
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     fetchData()
   }, [])
 
-  const fetchData = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/ghg/scope-one')
-      const result = await response.json()
-      setData(result.data || [])
-    } catch (error) {
-      console.error('Error fetching data:', error)
-    } finally {
-      setLoading(false)
+  // Fetch business master data from Supabase (general_information_business)
+  useEffect(() => {
+    const fetchBusiness = async () => {
+      try {
+        const { data: gbData, error } = await supabase
+          .from('general_information_business')
+          .select('entity, facility, lease_status')
+
+        if (error) {
+          console.error('Error fetching business data:', error)
+          setBusinessData([])
+        } else {
+          setBusinessData(gbData || [])
+        }
+      } catch (err) {
+        console.error('Unexpected error fetching business data:', err)
+        setBusinessData([])
+      }
     }
-  }
+
+    fetchBusiness()
+  }, [])
+
+  // Update lease status display when entity or facility changes
+  useEffect(() => {
+    if (!businessData || businessData.length === 0) {
+      setLeaseStatusDisplay('')
+      return
+    }
+
+    const match = businessData.find(item => item.entity === selectedEntity && item.facility === selectedFacility)
+    // fallback: if exact facility not selected, try match by entity only
+    if (match && match.lease_status) {
+      setLeaseStatusDisplay(match.lease_status)
+    } else {
+      const entityMatch = businessData.find(item => item.entity === selectedEntity)
+      setLeaseStatusDisplay(entityMatch?.lease_status || '')
+    }
+  }, [selectedEntity, selectedFacility, businessData])
 
   // Calculate preview when monthly data changes
   useEffect(() => {
@@ -277,8 +326,8 @@ export default function ScopeOneContent() {
       }
     }
   }, [formData.january, formData.february, formData.maret, formData.april, formData.may,
-      formData.june, formData.july, formData.augustus, formData.september, formData.october,
-      formData.november, formData.december, formData.types_of_fuel, formData.unit])
+  formData.june, formData.july, formData.augustus, formData.september, formData.october,
+  formData.november, formData.december, formData.types_of_fuel, formData.unit])
 
   const handleAddRecord = async () => {
     // Validation
@@ -294,10 +343,43 @@ export default function ScopeOneContent() {
     setIsSaving(true)
 
     try {
-      // Prepare data with calculations
-      const newRecord = {
-        ...formData,
-        id: `GHG-${Date.now()}`,
+      // Get current user to set updated_by
+      let updaterName = 'Unknown'
+      try {
+        const { data: userData, error: userError } = await supabase.auth.getUser()
+        if (!userError && userData && (userData as any).user) {
+          const u: any = (userData as any).user
+          updaterName = u.user_metadata?.nickname || u.user_metadata?.full_name || u.email || 'Unknown'
+        } else if (userError) {
+          console.warn('supabase.auth.getUser() error:', userError)
+        }
+      } catch (e) {
+        console.warn('Failed to get supabase user for updated_by:', e)
+      }
+      // Prepare payload for Supabase insert (exclude lease status display)
+      const payload: any = {
+        entity: formData.entity,
+        facility: formData.facility,
+        own_facility: formData.own_facility,
+        classification_fuel_rawmaterial: formData.classification_fuel_rawmaterial,
+        emissions_activites: formData.emissions_activites,
+        detailed_desc: formData.detailed_desc,
+        types_of_fuel: formData.types_of_fuel,
+        detailed_desc_fuel: formData.detailed_desc_fuel,
+        date_collection: formData.date_collection,
+        january: formData.january,
+        february: formData.february,
+        maret: formData.maret,
+        april: formData.april,
+        may: formData.may,
+        june: formData.june,
+        july: formData.july,
+        augustus: formData.augustus,
+        september: formData.september,
+        october: formData.october,
+        november: formData.november,
+        december: formData.december,
+        unit: formData.unit,
         fuel_usage: calculatedPreview.fuel_usage.toString().replace('.', ','),
         'fuel_consumption(Kg)': calculatedPreview.fuel_consumption.toString().replace('.', ','),
         'energy_consumption(MJ)': calculatedPreview.energy_consumption.toString().replace('.', ','),
@@ -305,22 +387,52 @@ export default function ScopeOneContent() {
         kgCO2: calculatedPreview.kgCO2.toString().replace('.', ','),
         kgCH4: calculatedPreview.kgCH4.toString().replace('.', ','),
         kgN2O: calculatedPreview.kgN2O.toString().replace('.', ','),
-        updated_by: 'Current User',
-        updated_date: new Date().toISOString().split('T')[0]
+        updated_by: updaterName,
+        updated_date: new Date().toISOString()
+      }
+      const { data: insertResult, error: insertError } = await supabase
+        .from('ghg_scopeone')
+        .insert(payload)
+        .select()
+
+      if (insertError) {
+        // Improved logging: print full error object and common fields
+        try {
+          console.error('Supabase insert error (detailed):', JSON.stringify(insertError, Object.getOwnPropertyNames(insertError), 2))
+        } catch (e) {
+          console.error('Supabase insert error (raw):', insertError)
+        }
+
+        // Surface more helpful info to the user
+        const msg = insertError?.message || insertError?.details || insertError?.hint || JSON.stringify(insertError)
+        toast({
+          title: 'Supabase insert error',
+          description: typeof msg === 'string' ? msg : 'See console for details',
+          variant: 'destructive'
+        })
+
+        throw insertError
       }
 
-      // Simulate API call (replace with actual Supabase integration later)
-      await new Promise(resolve => setTimeout(resolve, 1000))
-
-      // Add to local state
-      setData(prevData => [...prevData, newRecord as GHGScopeOneData])
+      // If insert returns the created row, append it; otherwise refresh data from server
+      if (Array.isArray(insertResult) && insertResult.length > 0) {
+        const created = insertResult[0]
+        setData(prevData => [...prevData, created as GHGScopeOneData])
+      } else {
+        try {
+          const resp = await fetch('/api/ghg/scope-one')
+          const json = await resp.json()
+          setData(json.data || [])
+        } catch (e) {
+          console.error('Failed to refresh data after insert fallback:', e)
+        }
+      }
 
       toast({
         title: "Success!",
         description: "New emission record has been added successfully",
       })
 
-      // Reset form
       setIsAddModalOpen(false)
       resetForm()
 
@@ -372,30 +484,29 @@ export default function ScopeOneContent() {
     })
   }
 
+  // Year options are based on the 'date_collection' column
   const years = useMemo(() => {
     const yearSet = new Set(data.map(item => item.date_collection).filter(Boolean))
     return Array.from(yearSet).sort()
   }, [data])
 
   const facilities = useMemo(() => {
-    const facilitySet = new Set(data.map(item => item.facility).filter(Boolean))
+    const facilitySet = new Set(businessData.map(item => item.facility).filter(Boolean))
     return Array.from(facilitySet).sort()
-  }, [data])
+  }, [businessData])
 
   // Get unique entities from data
   const entities = useMemo(() => {
-    const entitySet = new Set(data.map(item => item.entity).filter(Boolean))
+    const entitySet = new Set(businessData.map(item => item.entity).filter(Boolean))
     return Array.from(entitySet).sort()
-  }, [data])
+  }, [businessData])
 
-  // Get facilities filtered by selected entity for chart
+  // Get facilities filtered by selected entity for chart (from general_information_business)
   const chartFacilitiesForEntity = useMemo(() => {
     if (chartFilterEntity === "all") {
-      // When "all entities" is selected, show all facilities from business data
       const facilitySet = new Set(businessData.map(item => item.facility).filter(Boolean))
       return Array.from(facilitySet).sort()
     }
-    // When specific entity is selected, show only facilities related to that entity from business data
     const facilitySet = new Set(
       businessData.filter(item => item.entity === chartFilterEntity)
         .map(item => item.facility)
@@ -404,14 +515,12 @@ export default function ScopeOneContent() {
     return Array.from(facilitySet).sort()
   }, [businessData, chartFilterEntity])
 
-  // Get facilities filtered by selected entity for table filter
+  // Get facilities filtered by selected entity for table filter (from general_information_business)
   const tableFacilitiesForEntity = useMemo(() => {
     if (filterEntity === "all") {
-      // When "all entities" is selected, show all facilities from business data
       const facilitySet = new Set(businessData.map(item => item.facility).filter(Boolean))
       return Array.from(facilitySet).sort()
     }
-    // When specific entity is selected, show only facilities related to that entity from business data
     const facilitySet = new Set(
       businessData.filter(item => item.entity === filterEntity)
         .map(item => item.facility)
@@ -438,125 +547,41 @@ export default function ScopeOneContent() {
   }, [data])
 
   // Helper function to parse numbers with comma as decimal separator
-  const parseNumberWithComma = (value: string): number => {
-    if (!value) return 0
+  const parseNumberWithComma = (value: string | number): number => {
+    if (value === undefined || value === null) return 0
+    if (typeof value === 'number') return value
     // Replace comma with dot for decimal separator (European format)
     return parseFloat(value.replace(',', '.')) || 0
   }
 
-// Fetch business data when component mounts (for filters)
-  useEffect(() => {
-    const fetchBusinessData = async () => {
-      try {
-        // Fetch from CSV API that reads generalinformation.csv
-        const response = await fetch('/api/ghg/general-information')
-        const result = await response.json()
-        if (result.success && result.data) {
-          // Map the data to extract entity and facility
-          const mappedData = result.data.map((item: any) => ({
-            entity: item.entity,
-            facility: item.facility
-          }))
-          setBusinessData(mappedData)
-
-          // Debug logging
-          console.log('Business data loaded:', {
-            count: mappedData.length,
-            entities: [...new Set(mappedData.map((item: {entity: string, facility: string}) => item.entity))],
-            entityFacilityMap: mappedData.reduce((acc: Record<string, string[]>, item: {entity: string, facility: string}) => {
-              if (!acc[item.entity]) acc[item.entity] = []
-              acc[item.entity].push(item.facility)
-              return acc
-            }, {} as Record<string, string[]>)
-          })
-
-          // Show toast notification if no data is available
-          if (!result.data || result.data.length === 0) {
-            toast({
-              title: "No Business Data Available",
-              description: "The general_information_business table is empty. Please populate it with entity and facility data.",
-              variant: "destructive",
-              duration: 5000,
-            })
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching business data:', error)
-        toast({
-          title: "Error Loading Business Data",
-          description: "Failed to load entity and facility data. Please try again.",
-          variant: "destructive"
-        })
-      }
+  // Format ISO datetime into a nicer localized string with date and time
+  const formatDateTime = (iso?: string | null) => {
+    if (!iso) return 'N/A'
+    try {
+      const d = new Date(iso)
+      if (isNaN(d.getTime())) return 'Invalid date'
+      return d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch (e) {
+      return iso
     }
+  }
 
-    // Fetch business data when component mounts if not already loaded
-    if (businessData.length === 0) {
-      fetchBusinessData()
-    }
-  }, [businessData.length, toast])
+  // Removed all CSV/general-information fetches. All entity/facility options now come from ghg_scopeone data.
 
-  // Fetch business data from general_information_business table (for add modal)
-  useEffect(() => {
-    const fetchBusinessData = async () => {
-      try {
-        // Fetch from CSV API that reads generalinformation.csv
-        const response = await fetch('/api/ghg/general-information')
-        const result = await response.json()
-        if (result.success && result.data) {
-          // Map the data to extract entity and facility
-          const mappedData = result.data.map((item: any) => ({
-            entity: item.entity,
-            facility: item.facility
-          }))
-          setBusinessData(mappedData)
-
-          // Debug logging
-          console.log('Business data loaded:', {
-            count: mappedData.length,
-            entities: [...new Set(mappedData.map((item: {entity: string, facility: string}) => item.entity))],
-            entityFacilityMap: mappedData.reduce((acc: Record<string, string[]>, item: {entity: string, facility: string}) => {
-              if (!acc[item.entity]) acc[item.entity] = []
-              acc[item.entity].push(item.facility)
-              return acc
-            }, {} as Record<string, string[]>)
-          })
-
-          // Show toast notification if no data is available
-          if (!result.data || result.data.length === 0) {
-            toast({
-              title: "No Business Data Available",
-              description: "The general_information_business table is empty. Please populate it with entity and facility data.",
-              variant: "destructive",
-              duration: 5000,
-            })
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching business data:', error)
-        toast({
-          title: "Error Loading Business Data",
-          description: "Failed to load entity and facility data. Please try again.",
-          variant: "destructive"
-        })
-      }
-    }
-
-    if (isAddModalOpen) {
-      fetchBusinessData()
-    }
-  }, [isAddModalOpen, toast])
-
-  // Reset facility selection when entity changes
+  // Reset facility selection when entity changes (use businessData master)
   useEffect(() => {
     if (selectedEntity && selectedFacility) {
-      // Check if the currently selected facility belongs to the selected entity
       const validFacilities = businessData
         .filter(item => item.entity === selectedEntity)
         .map(item => item.facility)
 
       if (!validFacilities.includes(selectedFacility)) {
-        // Reset facility if it's not valid for the selected entity
         setSelectedFacility('')
         setFormData(prev => ({ ...prev, facility: '' }))
       }
@@ -570,8 +595,8 @@ export default function ScopeOneContent() {
 
       // Set unit based on fuel type
       if (formData.types_of_fuel === 'Industrial Wastes' ||
-          formData.types_of_fuel === 'Hydrofluorocarbons(HFCs)' ||
-          formData.types_of_fuel === 'ETC') {
+        formData.types_of_fuel === 'Hydrofluorocarbons(HFCs)' ||
+        formData.types_of_fuel === 'ETC') {
         defaultUnit = 'kg'
       } else if (formData.types_of_fuel === 'Liquefied Petroleum Gas (LPG)') {
         defaultUnit = 'kg'
@@ -769,8 +794,9 @@ export default function ScopeOneContent() {
   // Pagination
   const totalPages = Math.ceil(filteredTableData.length / itemsPerPage)
   const paginatedData = useMemo(() => {
+    const sorted = [...filteredTableData].sort((a, b) => Number(a.id) - Number(b.id))
     const startIndex = (currentPage - 1) * itemsPerPage
-    return filteredTableData.slice(startIndex, startIndex + itemsPerPage)
+    return sorted.slice(startIndex, startIndex + itemsPerPage)
   }, [filteredTableData, currentPage])
 
   // Reset to page 1 when filters change
@@ -804,6 +830,22 @@ export default function ScopeOneContent() {
       setChartSelectedYear(years[years.length - 1])
     }
   }, [chartViewMode, chartSelectedYear, years])
+
+  // Update edit lease status display when edit entity/facility changes
+  useEffect(() => {
+    if (!businessData || businessData.length === 0) {
+      setEditLeaseStatusDisplay('')
+      return
+    }
+
+    const match = businessData.find(item => item.entity === editSelectedEntity && item.facility === editSelectedFacility)
+    if (match && match.lease_status) {
+      setEditLeaseStatusDisplay(match.lease_status)
+    } else {
+      const entityMatch = businessData.find(item => item.entity === editSelectedEntity)
+      setEditLeaseStatusDisplay(entityMatch?.lease_status || '')
+    }
+  }, [editSelectedEntity, editSelectedFacility, businessData])
 
   // Calculate edit preview when monthly data changes
   useEffect(() => {
@@ -872,6 +914,11 @@ export default function ScopeOneContent() {
       setEditSelectedFacility(editingRecord.facility)
     }
   }, [editingRecord])
+
+  // Debug logs for troubleshooting chart zero data
+  console.log('Chart Data:', chartData)
+  console.log('Fuel Types:', fuelTypes)
+  console.log('Raw Data:', data)
 
   return (
     <div className="flex flex-1 flex-col gap-3 sm:gap-4 p-3 sm:p-4 md:p-6">
@@ -956,10 +1003,9 @@ export default function ScopeOneContent() {
                   <span className="truncate">GHG Emissions by Fuel Type and {chartViewMode === "yearly" ? "Year" : `Month (${chartSelectedYear})`}</span>
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  {chartViewMode === "yearly"
-                    ? "Comprehensive view of all 8 fuel types emissions breakdown"
-                    : `Monthly emissions breakdown for year ${chartSelectedYear}`
-                  }
+                  This chart is generated directly from the database. {chartViewMode === "yearly"
+                    ? "It shows a comprehensive breakdown of all 8 fuel types by year."
+                    : `It shows monthly emissions breakdown for year ${chartSelectedYear}.`}
                 </CardDescription>
               </div>
             </div>
@@ -1099,7 +1145,11 @@ export default function ScopeOneContent() {
           {loading ? (
             <Skeleton className="h-[300px] sm:h-[400px] w-full" />
           ) : (
-            <div className="space-y-3 sm:space-y-4">
+            <>
+              {chartData.every(row => fuelTypes.every(fuel => row[fuel] === 0)) && (
+                <div className="text-red-500 text-sm mb-2">No emission data found for the selected filters or data is missing in the database.</div>
+              )}
+              <div className="space-y-3 sm:space-y-4">
               <ChartContainer config={chartConfig} className="h-[300px] sm:h-[400px] w-full">
                 <BarChart data={chartData} margin={{ top: 20, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.3} />
@@ -1182,109 +1232,210 @@ export default function ScopeOneContent() {
 
                 </div>
                 <div className={`grid gap-3 ${chartViewMode === "monthly" ? "grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12" : "grid-cols-2 md:grid-cols-4 lg:grid-cols-6"}`}>
-                  {chartData.map((periodData, index) => {
-                    // Expected values from Excel (only for yearly view with no filters)
-                    const expectedValues: Record<string, number> = {
-                      '2022': 5807,
-                      '2023': 5473,
-                      '2024': 5416
+                  {(() => {
+                    // Use only chart filters for this section
+                    let chartFiltered = data;
+                    if (chartFilterEntity !== "all") {
+                      chartFiltered = chartFiltered.filter(item => item.entity === chartFilterEntity);
                     }
-                    const expected = chartViewMode === "yearly" && chartFilterEntity === "all" && chartFilterFacility === "all"
-                      ? expectedValues[periodData.year]
-                      : undefined
-                    const difference = expected ? Math.abs(periodData.total - expected) : 0
-                    const isAccurate = expected && difference < 1 // Less than 1 tCO2eq difference
-
-                    // Monthly styling with alternating patterns
-                    const isMonthly = chartViewMode === "monthly"
-                    const isQuarterEnd = isMonthly && (index + 1) % 3 === 0
-                    const quarterNumber = Math.floor(index / 3) + 1
-
-                    return (
-                      <div
-                        key={periodData.year}
-                        className={`
-                          flex flex-col items-center p-3 rounded-lg transition-all duration-200
-                          ${isAccurate
-                            ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'
-                            : isMonthly
-                              ? `border ${isQuarterEnd
-                                  ? 'border-foreground/20 bg-foreground/[0.03] dark:bg-foreground/[0.05]'
-                                  : 'border-border bg-background'
-                                } hover:border-foreground/30 hover:shadow-sm`
+                    if (chartFilterFacility !== "all") {
+                      chartFiltered = chartFiltered.filter(item => item.facility === chartFilterFacility);
+                    }
+                    if (chartViewMode === "monthly" && chartSelectedYear) {
+                      chartFiltered = chartFiltered.filter(item => item.date_collection === chartSelectedYear);
+                      // Group by month and sum emissions using proportional method
+                      const months = [
+                        { key: 'january', label: 'Jan' },
+                        { key: 'february', label: 'Feb' },
+                        { key: 'maret', label: 'Mar' },
+                        { key: 'april', label: 'Apr' },
+                        { key: 'may', label: 'May' },
+                        { key: 'june', label: 'Jun' },
+                        { key: 'july', label: 'Jul' },
+                        { key: 'augustus', label: 'Aug' },
+                        { key: 'september', label: 'Sep' },
+                        { key: 'october', label: 'Oct' },
+                        { key: 'november', label: 'Nov' },
+                        { key: 'december', label: 'Dec' },
+                      ];
+                      // Calculate monthly emissions for all records
+                      const monthTotals = months.map((month, index) => {
+                        let total = 0;
+                        chartFiltered.forEach(item => {
+                          const monthValue = parseNumberWithComma(item[month.key as keyof GHGScopeOneData]);
+                          const yearlyUsage = parseNumberWithComma(item.fuel_usage);
+                          const yearlyEmissions = parseNumberWithComma(item['ghg_emissions(tCO2eq)']);
+                          const monthlyEmissions = yearlyUsage > 0 ? (monthValue / yearlyUsage) * yearlyEmissions : 0;
+                          total += monthlyEmissions;
+                        });
+                        return { month, total };
+                      });
+                      return monthTotals.map(({ month, total }, index) => {
+                        const isQuarterEnd = (index + 1) % 3 === 0;
+                        const quarterNumber = Math.floor(index / 3) + 1;
+                        return (
+                          <div
+                            key={month.key}
+                            className={`
+                              flex flex-col items-center p-3 rounded-lg transition-all duration-200
+                              border ${isQuarterEnd
+                                ? 'border-foreground/20 bg-foreground/[0.03] dark:bg-foreground/[0.05]'
+                                : 'border-border bg-background'
+                              } hover:border-foreground/30 hover:shadow-sm
+                            `}
+                          >
+                            <span className="text-xs font-medium mb-1 text-foreground/70">{month.label}</span>
+                            <span className="font-bold text-foreground text-base">{formatNumber(total)}</span>
+                            <span className="text-xs text-muted-foreground">tCO2eq</span>
+                            {isQuarterEnd && (
+                              <span className="text-[10px] text-muted-foreground mt-1 font-medium tracking-wide">
+                                Q{quarterNumber}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      });
+                    }
+                    // Yearly view (default)
+                    // Group by year and sum emissions
+                    const yearTotals: Record<string, number> = {};
+                    chartFiltered.forEach(item => {
+                      const year = item.date_collection;
+                      if (!yearTotals[year]) yearTotals[year] = 0;
+                      yearTotals[year] += parseNumberWithComma(item['ghg_emissions(tCO2eq)']);
+                    });
+                    const years = Object.keys(yearTotals).sort();
+                    return years.map((year, index) => {
+                      // Expected values for verification (optional, can keep or remove)
+                      const expectedValues: Record<string, number> = {
+                        '2022': 5807.37,
+                        '2023': 5473,
+                        '2024': 5416
+                      };
+                      const expected = chartViewMode === "yearly" && chartFilterEntity === "all" && chartFilterFacility === "all"
+                        ? expectedValues[year]
+                        : undefined;
+                      const total = yearTotals[year];
+                      const difference = expected ? Math.abs(total - expected) : 0;
+                      const isAccurate = expected && difference < 1;
+                      // Monthly styling with alternating patterns
+                      const isMonthly = false;
+                      const isQuarterEnd = false;
+                      const quarterNumber = 0;
+                      return (
+                        <div
+                          key={year}
+                          className={`
+                            flex flex-col items-center p-3 rounded-lg transition-all duration-200
+                            ${isAccurate
+                              ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'
                               : 'bg-muted/50 hover:bg-muted border border-transparent'
-                          }
-                        `}
-                      >
-                        <span className={`text-xs font-medium mb-1 ${isMonthly ? 'text-foreground/70' : 'text-muted-foreground'}`}>
-                          {chartViewMode === "yearly" ? `Year ${periodData.year}` : periodData.year}
-                        </span>
-                        <span className={`font-bold text-foreground ${isMonthly ? 'text-base' : 'text-lg'}`}>
-                          {periodData.total.toFixed(2)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">tCO2eq</span>
-                        {expected && (
-                          <span className={`text-xs mt-1 ${isAccurate ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                            {isAccurate ? '✓ Verified' : `Δ ${difference.toFixed(2)}`}
-                          </span>
-                        )}
-                        {isMonthly && isQuarterEnd && (
-                          <span className="text-[10px] text-muted-foreground mt-1 font-medium tracking-wide">
-                            Q{quarterNumber}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
+                            }
+                          `}
+                        >
+                          <span className="text-xs font-medium mb-1 text-muted-foreground">Year {year}</span>
+                          <span className="font-bold text-foreground text-lg">{formatNumber(total)}</span>
+                          <span className="text-xs text-muted-foreground">tCO2eq</span>
+                          {expected && (
+                            <span className={`text-xs mt-1 ${isAccurate ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                              {isAccurate ? '✓ Verified' : `Δ ${difference.toFixed(2)}`}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
 
                 {/* Quarterly Summary for Monthly View */}
-                {chartViewMode === "monthly" && (
-                  <div className="mt-4 pt-4 border-t border-dashed">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quarterly Summary</h5>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {[
-                        { label: 'Q1', months: ['Jan', 'Feb', 'Mar'], color: 'from-slate-50 to-gray-50 dark:from-slate-900/50 dark:to-gray-900/50' },
-                        { label: 'Q2', months: ['Apr', 'May', 'Jun'], color: 'from-gray-50 to-zinc-50 dark:from-gray-900/50 dark:to-zinc-900/50' },
-                        { label: 'Q3', months: ['Jul', 'Aug', 'Sep'], color: 'from-zinc-50 to-neutral-50 dark:from-zinc-900/50 dark:to-neutral-900/50' },
-                        { label: 'Q4', months: ['Oct', 'Nov', 'Dec'], color: 'from-neutral-50 to-stone-50 dark:from-neutral-900/50 dark:to-stone-900/50' }
-                      ].map((quarter, qIndex) => {
-                        const quarterTotal = chartData
-                          .filter(d => quarter.months.includes(d.year))
-                          .reduce((sum, d) => sum + d.total, 0)
-
-                        return (
-                          <div
-                            key={quarter.label}
-                            className={`
-                              relative overflow-hidden rounded-lg border border-foreground/10
-                              bg-gradient-to-br ${quarter.color}
-                              p-4 transition-all duration-200 hover:border-foreground/20 hover:shadow-md
-                            `}
-                          >
-                            <div className="absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 bg-foreground/[0.02] rounded-full" />
-                            <div className="relative">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-bold text-foreground">{quarter.label}</span>
-                                <span className="text-[10px] text-muted-foreground font-medium">
-                                  {quarter.months.join(' • ')}
-                                </span>
-                              </div>
-                              <div className="flex items-baseline gap-1">
-                                <span className="text-xl font-bold text-foreground">{quarterTotal.toFixed(2)}</span>
-                                <span className="text-xs text-muted-foreground">tCO2eq</span>
+                {chartViewMode === "monthly" && (() => {
+                  // Use the same monthTotals as above
+                  const months = [
+                    { key: 'january', label: 'Jan' },
+                    { key: 'february', label: 'Feb' },
+                    { key: 'maret', label: 'Mar' },
+                    { key: 'april', label: 'Apr' },
+                    { key: 'may', label: 'May' },
+                    { key: 'june', label: 'Jun' },
+                    { key: 'july', label: 'Jul' },
+                    { key: 'augustus', label: 'Aug' },
+                    { key: 'september', label: 'Sep' },
+                    { key: 'october', label: 'Oct' },
+                    { key: 'november', label: 'Nov' },
+                    { key: 'december', label: 'Dec' },
+                  ];
+                  const quarters = [
+                    { label: 'Q1', months: ['Jan', 'Feb', 'Mar'], color: 'from-slate-50 to-gray-50 dark:from-slate-900/50 dark:to-gray-900/50' },
+                    { label: 'Q2', months: ['Apr', 'May', 'Jun'], color: 'from-gray-50 to-zinc-50 dark:from-gray-900/50 dark:to-zinc-900/50' },
+                    { label: 'Q3', months: ['Jul', 'Aug', 'Sep'], color: 'from-zinc-50 to-neutral-50 dark:from-zinc-900/50 dark:to-neutral-900/50' },
+                    { label: 'Q4', months: ['Oct', 'Nov', 'Dec'], color: 'from-neutral-50 to-stone-50 dark:from-neutral-900/50 dark:to-stone-900/50' }
+                  ];
+                  // Recalculate monthTotals for this scope
+                  let chartFiltered = data;
+                  if (chartFilterEntity !== "all") {
+                    chartFiltered = chartFiltered.filter(item => item.entity === chartFilterEntity);
+                  }
+                  if (chartFilterFacility !== "all") {
+                    chartFiltered = chartFiltered.filter(item => item.facility === chartFilterFacility);
+                  }
+                  if (chartSelectedYear) {
+                    chartFiltered = chartFiltered.filter(item => item.date_collection === chartSelectedYear);
+                  }
+                  const monthTotals = months.map(month => {
+                    let total = 0;
+                    chartFiltered.forEach(item => {
+                      const monthValue = parseNumberWithComma(item[month.key as keyof GHGScopeOneData]);
+                      const yearlyUsage = parseNumberWithComma(item.fuel_usage);
+                      const yearlyEmissions = parseNumberWithComma(item['ghg_emissions(tCO2eq)']);
+                      const monthlyEmissions = yearlyUsage > 0 ? (monthValue / yearlyUsage) * yearlyEmissions : 0;
+                      total += monthlyEmissions;
+                    });
+                    return { label: month.label, total };
+                  });
+                  return (
+                    <div className="mt-4 pt-4 border-t border-dashed">
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Quarterly Summary</h5>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {quarters.map((quarter, qIndex) => {
+                          // Sum the totals for the months in this quarter
+                          const quarterTotal = quarter.months.reduce((sum, mLabel) => {
+                            const m = monthTotals.find(mt => mt.label === mLabel);
+                            return sum + (m ? m.total : 0);
+                          }, 0);
+                          return (
+                            <div
+                              key={quarter.label}
+                              className={`
+                                relative overflow-hidden rounded-lg border border-foreground/10
+                                bg-gradient-to-br ${quarter.color}
+                                p-4 transition-all duration-200 hover:border-foreground/20 hover:shadow-md
+                              `}
+                            >
+                              <div className="absolute top-0 right-0 w-16 h-16 -mr-4 -mt-4 bg-foreground/[0.02] rounded-full" />
+                              <div className="relative">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-sm font-bold text-foreground">{quarter.label}</span>
+                                  <span className="text-[10px] text-muted-foreground font-medium">
+                                    {quarter.months.join(' • ')}
+                                  </span>
+                                </div>
+                                <div className="flex items-baseline gap-1">
+                                  <span className="text-xl font-bold text-foreground">{quarterTotal.toFixed(2)}</span>
+                                  <span className="text-xs text-muted-foreground">tCO2eq</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
-            </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -1298,9 +1449,14 @@ export default function ScopeOneContent() {
                 <CardTitle>Emissions Data Records</CardTitle>
                 <CardDescription>View and manage all scope one emissions records</CardDescription>
               </div>
-              <Button variant="outline" size="icon">
-                <Download className="h-4 w-4" />
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="icon">
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button variant="default" onClick={() => setIsAddModalOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" /> Add Record
+                </Button>
+              </div>
             </div>
 
             {/* Integrated Statistics */}
@@ -1317,22 +1473,34 @@ export default function ScopeOneContent() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="p-3 rounded-lg border bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
                   <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-1">Total Emissions</p>
-                  <p className="text-xl font-bold text-green-800 dark:text-green-300">{statistics.totalEmissions}</p>
+                  <p className="text-xl font-bold text-green-800 dark:text-green-300">{
+                    formatNumber(
+                      filteredTableData.reduce((sum, item) => sum + parseNumberWithComma(item['ghg_emissions(tCO2eq)']), 0)
+                    )
+                  }</p>
                   <p className="text-xs text-green-600 dark:text-green-500">tCO2eq</p>
                 </div>
                 <div className="p-3 rounded-lg border bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/20 dark:to-yellow-950/20 border-amber-200 dark:border-amber-800">
                   <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">Energy Consumption</p>
-                  <p className="text-xl font-bold text-amber-800 dark:text-amber-300">{parseFloat(statistics.totalEnergyConsumption).toLocaleString()}</p>
+                  <p className="text-xl font-bold text-amber-800 dark:text-amber-300">{
+                    formatNumber(
+                      filteredTableData.reduce((sum, item) => sum + parseNumberWithComma(item['energy_consumption(MJ)']), 0)
+                    )
+                  }</p>
                   <p className="text-xs text-amber-600 dark:text-amber-500">MJ</p>
                 </div>
                 <div className="p-3 rounded-lg border bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800">
                   <p className="text-xs font-medium text-purple-700 dark:text-purple-400 mb-1">Fuel Consumption</p>
-                  <p className="text-xl font-bold text-purple-800 dark:text-purple-300">{parseFloat(statistics.totalFuelConsumption).toLocaleString()}</p>
+                  <p className="text-xl font-bold text-purple-800 dark:text-purple-300">{
+                    formatNumber(
+                      filteredTableData.reduce((sum, item) => sum + parseNumberWithComma(item['fuel_consumption(Kg)']), 0)
+                    )
+                  }</p>
                   <p className="text-xs text-purple-600 dark:text-purple-500">Kg</p>
                 </div>
                 <div className="p-3 rounded-lg border bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/20 dark:to-sky-950/20 border-blue-200 dark:border-blue-800">
                   <p className="text-xs font-medium text-blue-700 dark:text-blue-400 mb-1">Total Records</p>
-                  <p className="text-xl font-bold text-blue-800 dark:text-blue-300">{statistics.totalRecords}</p>
+                  <p className="text-xl font-bold text-blue-800 dark:text-blue-300">{filteredTableData.length}</p>
                   <p className="text-xs text-blue-600 dark:text-blue-500">entries</p>
                 </div>
               </div>
@@ -1413,98 +1581,61 @@ export default function ScopeOneContent() {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[60px] sm:w-[80px] text-xs sm:text-sm sticky left-0 bg-background z-10">No</TableHead>
-                    <TableHead className="min-w-[120px] text-xs sm:text-sm">Facility</TableHead>
-                    <TableHead className="min-w-[140px] text-xs sm:text-sm">Fuel Type</TableHead>
-                    <TableHead className="w-[80px] text-xs sm:text-sm">Year</TableHead>
-                    <TableHead className="min-w-[120px] hidden sm:table-cell text-xs sm:text-sm">Classification</TableHead>
-                    <TableHead className="min-w-[120px] text-right text-xs sm:text-sm">
-                      <div className="flex items-center justify-end gap-1">
-                        Fuel Usage
-                        <Fuel className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground" />
-                      </div>
-                    </TableHead>
-                    <TableHead className="min-w-[140px] text-right text-xs sm:text-sm">
-                      <div className="flex items-center justify-end gap-1">
-                        Emissions (tCO2eq)
-                        <Calculator className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-muted-foreground" />
-                      </div>
-                    </TableHead>
-                    <TableHead className="w-[100px] text-xs sm:text-sm sticky right-0 bg-background z-10 text-center">Actions</TableHead>
+                    <TableRow>
+                    <TableHead>No</TableHead>
+                    <TableHead>Facility</TableHead>
+                    <TableHead>Fuel Type</TableHead>
+                    <TableHead>Year</TableHead>
+                    <TableHead>Fuel Usage</TableHead>
+                    <TableHead>Unit</TableHead>
+                    <TableHead className="text-center">GHG Emissions (tCO2eq)</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? (
-                    [...Array(5)].map((_, i) => (
-                      <TableRow key={i}>
-                        {[...Array(8)].map((_, j) => (
-                          <TableCell key={j} className="p-2 sm:p-4">
-                            <Skeleton className="h-3 sm:h-4 w-full" />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : paginatedData.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center h-16 sm:h-24 text-muted-foreground text-xs sm:text-sm">
-                        No records found
+                  {paginatedData.map((row, idx) => (
+                    <TableRow key={row.id}>
+                      <TableCell>{(currentPage - 1) * itemsPerPage + idx + 1}</TableCell>
+                      <TableCell>{row.facility}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" style={{ borderColor: FUEL_COLORS[row.types_of_fuel] }} className="text-xs px-1.5 py-0.5 border-2">
+                          {row.types_of_fuel}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{row.date_collection}</TableCell>
+                      <TableCell title={String(row.fuel_usage)}>{parseNumberWithComma(row.fuel_usage).toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell>{row.unit}</TableCell>
+                      <TableCell className="text-center" title={String(row['ghg_emissions(tCO2eq)'])}>{parseNumberWithComma(row['ghg_emissions(tCO2eq)']).toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 dark:hover:text-blue-400"
+                            onClick={() => {
+                              setEditingRecord(row)
+                              setIsEditModalOpen(true)
+                            }}
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 dark:hover:text-emerald-400"
+                            onClick={() => {
+                              setViewingRecord(row)
+                              setIsViewModalOpen(true)
+                            }}
+                            title="Show"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    paginatedData.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium text-xs sm:text-sm p-2 sm:p-4 sticky left-0 bg-background">{item.id}</TableCell>
-                        <TableCell className="max-w-[120px] truncate text-xs sm:text-sm p-2 sm:p-4">{item.facility}</TableCell>
-                        <TableCell className="p-2 sm:p-4">
-                          <Badge variant="outline" style={{ borderColor: FUEL_COLORS[item.types_of_fuel] }} className="text-xs px-1.5 py-0.5">
-                            {item.types_of_fuel}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs sm:text-sm p-2 sm:p-4">{item.date_collection}</TableCell>
-                        <TableCell className="max-w-[120px] truncate hidden sm:table-cell text-xs sm:text-sm p-2 sm:p-4">{item.own_facility}</TableCell>
-                        <TableCell className="text-right text-xs sm:text-sm p-2 sm:p-4">
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="font-mono text-xs sm:text-sm">
-                              {parseNumberWithComma(item.fuel_usage).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                            </span>
-                            <span className="text-xs text-muted-foreground">{item.unit}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-xs sm:text-sm p-2 sm:p-4">
-                          {parseNumberWithComma(item['ghg_emissions(tCO2eq)']).toFixed(2)}
-                        </TableCell>
-                        <TableCell className="p-2 sm:p-4 sticky right-0 bg-background">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950 dark:hover:text-blue-400"
-                              onClick={() => {
-                                setEditingRecord(item)
-                                setIsEditModalOpen(true)
-                              }}
-                              title="Edit"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 dark:hover:text-emerald-400"
-                              onClick={() => {
-                                setViewingRecord(item)
-                                setIsViewModalOpen(true)
-                              }}
-                              title="View"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -1575,12 +1706,7 @@ export default function ScopeOneContent() {
 
       {/* Add New Record Sheet */}
       <Sheet open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <SheetTrigger asChild>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Add New Record
-          </Button>
-        </SheetTrigger>
+        {/* Removed duplicate Add New Record button at the bottom. Only SheetContent remains. */}
         <SheetContent className="w-[95vw] max-w-[1400px] sm:max-w-[1400px] overflow-hidden flex flex-col p-0">
           {/* Fixed Header */}
           <div className="sticky top-0 z-10 bg-background border-b px-6 py-4">
@@ -1599,413 +1725,425 @@ export default function ScopeOneContent() {
 
           {/* Scrollable Content */}
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-              {/* Section 1: Basic Information */}
-              <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Basic Information</h3>
+            {/* Section 1: Basic Information */}
+            <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="entity" className="text-sm font-medium">Entity *</Label>
-                    <Popover open={openEntityCombobox} onOpenChange={setOpenEntityCombobox}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openEntityCombobox}
-                          className="w-full justify-between h-10"
-                        >
-                          <span className="truncate text-left">{selectedEntity || "Select entity..."}</span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0 max-h-[320px] overflow-auto">
-                        <Command>
-                          <CommandInput placeholder="Search entity..." />
-                          <CommandList>
+                <h3 className="text-lg font-semibold text-foreground">Basic Information</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="entity" className="text-sm font-medium">Entity *</Label>
+                  <Popover open={openEntityCombobox} onOpenChange={setOpenEntityCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openEntityCombobox}
+                        className="w-full justify-between h-10"
+                      >
+                        <span className="truncate text-left">{selectedEntity || "Select entity..."}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0 max-h-[320px] overflow-auto">
+                      <Command>
+                        <CommandInput placeholder="Search entity..." />
+                        <CommandList>
                             <CommandEmpty>
                               {businessData.length === 0 ? "No business data available in database." : "No entity found."}
                             </CommandEmpty>
-                            <CommandGroup>
+                          <CommandGroup>
                               {Array.from(new Set(businessData.map(item => item.entity))).map((entity) => (
+                              <CommandItem
+                                key={entity}
+                                value={entity}
+                                onSelect={(currentValue) => {
+                                  setSelectedEntity(currentValue === selectedEntity ? "" : currentValue)
+                                  setFormData({ ...formData, entity: currentValue })
+                                  setOpenEntityCombobox(false)
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    selectedEntity === entity ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <span className="truncate">{entity}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {data.length === 0 && (
+                    <p className="text-xs text-red-600 dark:text-red-400">No business data available.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="facility" className="text-sm font-medium">Facility *</Label>
+                  <Popover open={openFacilityCombobox} onOpenChange={setOpenFacilityCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openFacilityCombobox}
+                        className="w-full justify-between h-10"
+                        disabled={!selectedEntity}
+                      >
+                        <span className="truncate text-left">{selectedFacility || (selectedEntity ? "Select facility..." : "Select entity first")}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0 max-h-[320px] overflow-auto">
+                      <Command>
+                        <CommandInput placeholder="Search facility..." />
+                        <CommandList>
+                                <CommandEmpty>
+                                  {businessData.length === 0
+                                    ? "No business data available in database."
+                                    : selectedEntity
+                                      ? "No facility found for selected entity."
+                                      : "Please select an entity first."
+                                  }
+                                </CommandEmpty>
+                                <CommandGroup>
+                                  {Array.from(new Set(businessData.filter(item => !selectedEntity || item.entity === selectedEntity).map(item => item.facility)))
+                                    .map((facility, index) => (
                                 <CommandItem
-                                  key={entity}
-                                  value={entity}
+                                  key={`${selectedEntity}-${facility}-${index}`}
+                                  value={facility}
                                   onSelect={(currentValue) => {
-                                    setSelectedEntity(currentValue === selectedEntity ? "" : currentValue)
-                                    setFormData({ ...formData, entity: currentValue })
-                                    setOpenEntityCombobox(false)
+                                    setSelectedFacility(currentValue === selectedFacility ? "" : currentValue)
+                                    setFormData({ ...formData, facility: currentValue })
+                                    setOpenFacilityCombobox(false)
                                   }}
                                 >
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      selectedEntity === entity ? "opacity-100" : "opacity-0"
+                                      selectedFacility === facility ? "opacity-100" : "opacity-0"
                                     )}
                                   />
-                                  <span className="truncate">{entity}</span>
+                                  <span className="truncate">{facility}</span>
                                 </CommandItem>
                               ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                    {businessData.length === 0 && (
-                      <p className="text-xs text-red-600 dark:text-red-400">No business data available.</p>
-                    )}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  {!selectedEntity && data.length > 0 && (
+                    <p className="text-xs text-muted-foreground">Select entity first.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="lease_status" className="text-sm font-medium">Lease Status</Label>
+                  <div className="w-full h-10 px-3 flex items-center rounded-md border bg-muted">
+                    <span className="truncate text-sm text-foreground">{leaseStatusDisplay || '-'}</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="facility" className="text-sm font-medium">Facility *</Label>
-                    <Popover open={openFacilityCombobox} onOpenChange={setOpenFacilityCombobox}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openFacilityCombobox}
-                          className="w-full justify-between h-10"
-                          disabled={!selectedEntity}
-                        >
-                          <span className="truncate text-left">{selectedFacility || (selectedEntity ? "Select facility..." : "Select entity first")}</span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0 max-h-[320px] overflow-auto">
-                        <Command>
-                          <CommandInput placeholder="Search facility..." />
-                          <CommandList>
-                            <CommandEmpty>
-                              {businessData.length === 0
-                                ? "No business data available in database."
-                                : selectedEntity
-                                  ? "No facility found for selected entity."
-                                  : "Please select an entity first."
-                              }
-                            </CommandEmpty>
-                            <CommandGroup>
-                              {businessData
-                                .filter(item => !selectedEntity || item.entity === selectedEntity)
-                                .map((item, index) => (
-                                  <CommandItem
-                                    key={`${item.entity}-${item.facility}-${index}`}
-                                    value={item.facility}
-                                    onSelect={(currentValue) => {
-                                      setSelectedFacility(currentValue === selectedFacility ? "" : currentValue)
-                                      setFormData({ ...formData, facility: currentValue })
-                                      setOpenFacilityCombobox(false)
-                                    }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        selectedFacility === item.facility ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    <span className="truncate">{item.facility}</span>
-                                  </CommandItem>
-                                ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                    {!selectedEntity && businessData.length > 0 && (
-                      <p className="text-xs text-muted-foreground">Select entity first.</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="own_facility" className="text-sm font-medium">Lease Status</Label>
-                    <Select value={formData.own_facility} onValueChange={(value) => setFormData({ ...formData, own_facility: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select lease status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ownFacilityOptions.map(option => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="year" className="text-sm font-medium">Year *</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal h-10",
-                            !selectedYear && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
-                          <span>{selectedYear ? selectedYear.getFullYear() : "Pick a year"}</span>
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={selectedYear}
-                          onSelect={(date) => {
-                            setSelectedYear(date)
-                            if (date) {
-                              setFormData({ ...formData, date_collection: date.getFullYear().toString() })
-                            }
-                          }}
-                          disabled={(date) =>
-                            date > new Date() || date < new Date("1900-01-01")
+                  <p className="text-xs text-muted-foreground">Lease status is read-only and comes from business master data.</p>
+                  {businessData.length > 0 && !leaseStatusDisplay && selectedEntity && selectedFacility && (
+                    <p className="text-xs text-red-600">Lease status not found for selected entity/facility.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="year" className="text-sm font-medium">Year *</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal h-10",
+                          !selectedYear && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4 shrink-0" />
+                        <span>{selectedYear ? selectedYear.getFullYear() : "Pick a year"}</span>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={selectedYear}
+                        onSelect={(date) => {
+                          setSelectedYear(date)
+                          if (date) {
+                            setFormData({ ...formData, date_collection: date.getFullYear().toString() })
                           }
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-              </div>
-
-              {/* Fuel Information */}
-              <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Fuel Information</h3>
-                </div>
-                <div className="grid grid-cols-1 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="types_of_fuel" className="text-sm font-medium">
-                      Type of Fuel <span className="text-red-500">*</span>
-                    </Label>
-                    <Select value={formData.types_of_fuel} onValueChange={(value) => setFormData({ ...formData, types_of_fuel: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select fuel type" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[320px] overflow-auto">
-                        {Object.keys(FUEL_COLORS).map(fuelType => (
-                          <SelectItem key={fuelType} value={fuelType}>
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: FUEL_COLORS[fuelType] }} />
-                              <span className="truncate">{fuelType}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="own_facility_fuel" className="text-sm font-medium">Own Facility</Label>
-                    <Select value={formData.own_facility} onValueChange={(value) => setFormData({ ...formData, own_facility: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select Specific Criteria" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ownFacilityOptions.map(option => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="classification_fuel_rawmaterial" className="text-sm font-medium">Classification Fuel</Label>
-                    <Select value={formData.classification_fuel_rawmaterial} onValueChange={(value) => setFormData({ ...formData, classification_fuel_rawmaterial: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select fuel classification" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Fuel">Fuel</SelectItem>
-                        <SelectItem value="Raw Material">Raw Material</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="emissions_activites" className="text-sm font-medium">Emission Activities</Label>
-                    <Select value={formData.emissions_activites} onValueChange={(value) => setFormData({ ...formData, emissions_activites: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select emission activity" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {emissionActivitiesOptions.map(option => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="detailed_description" className="text-sm font-medium">Detailed Description</Label>
-                    <Input
-                      id="detailed_description"
-                      placeholder="Enter detailed description of fuel usage"
-                      value={formData.detailed_desc || ''}
-                      onChange={(e) => setFormData({ ...formData, detailed_desc: e.target.value })}
-                      className="w-full h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="unit" className="text-sm font-medium">Unit (Auto)</Label>
-                    <Select value={formData.unit} onValueChange={(value) => setFormData({ ...formData, unit: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="㎥">㎥ (Cubic Meter)</SelectItem>
-                        <SelectItem value="L">L (Liter)</SelectItem>
-                        <SelectItem value="kg">kg (Kilogram)</SelectItem>
-                        <SelectItem value="ton">ton (Ton)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">Auto-selected based on fuel</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Monthly Usage Data */}
-              <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">Monthly Fuel Usage</h3>
-                    <p className="text-sm text-muted-foreground">Enter consumption data for each month ({formData.unit})</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {[
-                    { key: 'january', label: 'Jan', quarter: 'Q1' },
-                    { key: 'february', label: 'Feb', quarter: 'Q1' },
-                    { key: 'maret', label: 'Mar', quarter: 'Q1' },
-                    { key: 'april', label: 'Apr', quarter: 'Q2' },
-                    { key: 'may', label: 'May', quarter: 'Q2' },
-                    { key: 'june', label: 'Jun', quarter: 'Q2' },
-                    { key: 'july', label: 'Jul', quarter: 'Q3' },
-                    { key: 'augustus', label: 'Aug', quarter: 'Q3' },
-                    { key: 'september', label: 'Sep', quarter: 'Q3' },
-                    { key: 'october', label: 'Oct', quarter: 'Q4' },
-                    { key: 'november', label: 'Nov', quarter: 'Q4' },
-                    { key: 'december', label: 'Dec', quarter: 'Q4' },
-                  ].map(month => (
-                    <div key={month.key} className="space-y-1.5">
-                      <Label htmlFor={month.key} className="text-xs font-medium text-center block text-muted-foreground">
-                        {month.label}
-                      </Label>
-                      <Input
-                        id={month.key}
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData[month.key as keyof typeof formData]}
-                        onChange={(e) => setFormData({ ...formData, [month.key]: e.target.value })}
-                        className="text-sm h-10 text-center font-mono"
+                        }}
+                        disabled={(date) =>
+                          date > new Date() || date < new Date("1900-01-01")
+                        }
+                        initialFocus
                       />
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center justify-center pt-2">
-                  <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-                      Q1 (Jan-Mar)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                      Q2 (Apr-Jun)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
-                      Q3 (Jul-Sep)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                      Q4 (Oct-Dec)
-                    </span>
-                  </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
-
-              {/* Real-time Calculation Preview */}
-              {formData.types_of_fuel && (
-                <div className="space-y-5 p-6 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 rounded-xl border border-green-200 dark:border-green-800 shadow-sm animate-in fade-in duration-500">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
-                        <Calculator className="h-5 w-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm text-green-800 dark:text-green-200">Calculated Emissions</h4>
-                        <p className="text-xs text-green-600 dark:text-green-400">Real-time emissions (IPCC)</p>
-                      </div>
-                    </div>
-                    <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs px-2 py-0.5 flex-shrink-0">
-                      Live
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
-                      <p className="text-lg font-bold">{calculatedPreview.fuel_usage.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">{formData.unit}</p>
-                    </div>
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Fuel Consumption</p>
-                      <p className="text-lg font-bold">{calculatedPreview.fuel_consumption.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                      <p className="text-xs text-muted-foreground">Kg</p>
-                    </div>
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Energy</p>
-                      <p className="text-lg font-bold">{calculatedPreview.energy_consumption.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                      <p className="text-xs text-muted-foreground">MJ</p>
-                    </div>
-                    <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
-                      <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
-                      <p className="text-lg font-bold text-green-700 dark:text-green-400">{calculatedPreview.ghg_emissions.toFixed(2)}</p>
-                      <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
-                    </div>
-                  </div>
-
-                  {/* Gas Breakdown */}
-                  <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800">
-                    <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-3">Individual Gas Emissions (Kg)</p>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-red-600 dark:text-red-400">CO₂</span>
-                        </div>
-                        <span className="font-mono font-medium">{calculatedPreview.kgCO2.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-orange-600 dark:text-orange-400">CH₄</span>
-                        </div>
-                        <span className="font-mono font-medium">{calculatedPreview.kgCH4.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400">N₂O</span>
-                        </div>
-                        <span className="font-mono font-medium">{calculatedPreview.kgN2O.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-<SheetFooter className="flex flex-col sm:flex-row gap-3 border-t bg-muted/30 px-6 py-4">
+            {/* Fuel Information */}
+            <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-foreground">Fuel Information</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="types_of_fuel" className="text-sm font-medium">
+                    Type of Fuel <span className="text-red-500">*</span>
+                  </Label>
+                  <Select value={formData.types_of_fuel} onValueChange={(value) => setFormData({ ...formData, types_of_fuel: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="Select fuel type" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[320px] overflow-auto">
+                      {Object.keys(FUEL_COLORS).map(fuelType => (
+                        <SelectItem key={fuelType} value={fuelType}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: FUEL_COLORS[fuelType] }} />
+                            <span className="truncate">{fuelType}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Move Unit directly under Type of Fuel */}
+                <div className="space-y-2">
+                  <Label htmlFor="unit" className="text-sm font-medium">Unit (Auto)</Label>
+                  <Select value={formData.unit} onValueChange={(value) => setFormData({ ...formData, unit: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="㎥">㎥ (Cubic Meter)</SelectItem>
+                      <SelectItem value="L">L (Liter)</SelectItem>
+                      <SelectItem value="kg">kg (Kilogram)</SelectItem>
+                      <SelectItem value="ton">ton (Ton)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Auto-selected based on fuel</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="own_facility_fuel" className="text-sm font-medium">Own Facility</Label>
+                  <Select value={formData.own_facility} onValueChange={(value) => setFormData({ ...formData, own_facility: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="Select Specific Criteria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ownFacilityOptions.map(option => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="classification_fuel_rawmaterial" className="text-sm font-medium">Classification Fuel</Label>
+                  <Select value={formData.classification_fuel_rawmaterial} onValueChange={(value) => setFormData({ ...formData, classification_fuel_rawmaterial: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="Select fuel classification" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Fuel">Fuel</SelectItem>
+                      <SelectItem value="Raw Material">Raw Material</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="emissions_activites" className="text-sm font-medium">Emission Activities</Label>
+                  <Select value={formData.emissions_activites} onValueChange={(value) => setFormData({ ...formData, emissions_activites: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="Select emission activity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {emissionActivitiesOptions.map(option => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* New: Detailed Description Fuel (connected to detailed_desc_fuel) */}
+                <div className="space-y-2">
+                  <Label htmlFor="detailed_desc_fuel" className="text-sm font-medium">Detailed Description Fuel</Label>
+                  <Input
+                    id="detailed_desc_fuel"
+                    placeholder="Enter detailed fuel description"
+                    value={formData.detailed_desc_fuel || ''}
+                    onChange={(e) => setFormData({ ...formData, detailed_desc_fuel: e.target.value })}
+                    className="w-full h-10"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="detailed_description" className="text-sm font-medium">Detailed Description</Label>
+                  <Input
+                    id="detailed_description"
+                    placeholder="Enter detailed description of fuel usage"
+                    value={formData.detailed_desc || ''}
+                    onChange={(e) => setFormData({ ...formData, detailed_desc: e.target.value })}
+                    className="w-full h-10"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Monthly Usage Data */}
+            <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">Monthly Fuel Usage</h3>
+                  <p className="text-sm text-muted-foreground">Enter consumption data for each month ({formData.unit})</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {[
+                  { key: 'january', label: 'Jan', quarter: 'Q1' },
+                  { key: 'february', label: 'Feb', quarter: 'Q1' },
+                  { key: 'maret', label: 'Mar', quarter: 'Q1' },
+                  { key: 'april', label: 'Apr', quarter: 'Q2' },
+                  { key: 'may', label: 'May', quarter: 'Q2' },
+                  { key: 'june', label: 'Jun', quarter: 'Q2' },
+                  { key: 'july', label: 'Jul', quarter: 'Q3' },
+                  { key: 'augustus', label: 'Aug', quarter: 'Q3' },
+                  { key: 'september', label: 'Sep', quarter: 'Q3' },
+                  { key: 'october', label: 'Oct', quarter: 'Q4' },
+                  { key: 'november', label: 'Nov', quarter: 'Q4' },
+                  { key: 'december', label: 'Dec', quarter: 'Q4' },
+                ].map(month => (
+                  <div key={month.key} className="space-y-1.5">
+                    <Label htmlFor={month.key} className="text-xs font-medium text-center block text-muted-foreground">
+                      {month.label}
+                    </Label>
+                    <Input
+                      id={month.key}
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={formData[month.key as keyof typeof formData]}
+                      onChange={(e) => setFormData({ ...formData, [month.key]: e.target.value })}
+                      className="text-sm h-10 text-center font-mono"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-center pt-2">
+                <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
+                    Q1 (Jan-Mar)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                    Q2 (Apr-Jun)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-orange-500"></div>
+                    Q3 (Jul-Sep)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                    Q4 (Oct-Dec)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Real-time Calculation Preview */}
+            {formData.types_of_fuel && (
+              <div className="space-y-5 p-6 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 rounded-xl border border-green-200 dark:border-green-800 shadow-sm animate-in fade-in duration-500">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
+                      <Calculator className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-sm text-green-800 dark:text-green-200">Calculated Emissions</h4>
+                      <p className="text-xs text-green-600 dark:text-green-400">Real-time emissions (IPCC)</p>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs px-2 py-0.5 flex-shrink-0">
+                    Live
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
+                    <p className="text-lg font-bold">{calculatedPreview.fuel_usage.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">{formData.unit}</p>
+                  </div>
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Fuel Consumption</p>
+                    <p className="text-lg font-bold">{calculatedPreview.fuel_consumption.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-muted-foreground">Kg</p>
+                  </div>
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Energy</p>
+                    <p className="text-lg font-bold">{calculatedPreview.energy_consumption.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-muted-foreground">MJ</p>
+                  </div>
+                  <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
+                    <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{calculatedPreview.ghg_emissions.toFixed(2)}</p>
+                    <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
+                  </div>
+                </div>
+
+                {/* Gas Breakdown */}
+                <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800">
+                  <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-3">Individual Gas Emissions (Kg)</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-red-600 dark:text-red-400">CO₂</span>
+                      </div>
+                      <span className="font-mono font-medium">{calculatedPreview.kgCO2.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-orange-600 dark:text-orange-400">CH₄</span>
+                      </div>
+                      <span className="font-mono font-medium">{calculatedPreview.kgCH4.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400">N₂O</span>
+                      </div>
+                      <span className="font-mono font-medium">{calculatedPreview.kgN2O.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <SheetFooter className="flex flex-col sm:flex-row gap-3 border-t bg-muted/30 px-6 py-4">
             <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto ml-auto">
               <Button variant="outline" onClick={() => setIsAddModalOpen(false)} disabled={isSaving} size="lg" className="flex-1 sm:flex-none">
                 <X className="mr-2 h-4 w-4" />
@@ -2029,7 +2167,7 @@ export default function ScopeOneContent() {
         </SheetContent>
       </Sheet>
 
-{/* View Detail Sheet */}
+      {/* View Detail Sheet */}
       <Sheet open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
         <SheetContent className="w-[95vw] max-w-[900px] sm:max-w-[900px] overflow-hidden flex flex-col p-0">
           {/* Header */}
@@ -2045,169 +2183,177 @@ export default function ScopeOneContent() {
                 {viewingRecord && `Record ID: ${viewingRecord.id} | Year: ${viewingRecord.date_collection}`}
               </SheetDescription>
             </SheetHeader>
-            </div>
+          </div>
 
-            {/* Content */}
-            {viewingRecord && (
-              <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-                {/* Basic Info Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
-                    <h4 className="font-semibold text-sm text-foreground flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                      Basic Information
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Entity</span>
-                        <span className="text-sm font-medium text-right max-w-[200px]">{viewingRecord.entity}</span>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Facility</span>
-                        <span className="text-sm font-medium text-right max-w-[200px]">{viewingRecord.facility}</span>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Lease Status</span>
-                        <span className="text-sm font-medium">{viewingRecord.own_facility || '-'}</span>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Year</span>
-                        <span className="text-sm font-medium">{viewingRecord.date_collection}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
-                    <h4 className="font-semibold text-sm text-foreground flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                      Fuel Information
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Fuel Type</span>
-                        <Badge variant="outline" style={{ borderColor: FUEL_COLORS[viewingRecord.types_of_fuel] }}>
-                          {viewingRecord.types_of_fuel}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Own Facility</span>
-                        <span className="text-sm font-medium">{viewingRecord.own_facility || '-'}</span>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Classification</span>
-                        <span className="text-sm font-medium">{viewingRecord.classification_fuel_rawmaterial || '-'}</span>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Emission Activities</span>
-                        <span className="text-sm font-medium text-right max-w-[150px]">{viewingRecord.emissions_activites || '-'}</span>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Detailed Description</span>
-                        <span className="text-sm font-medium text-right max-w-[200px]">{viewingRecord.detailed_desc || '-'}</span>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <span className="text-sm text-muted-foreground">Unit</span>
-                        <span className="text-sm font-medium">{viewingRecord.unit}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Monthly Usage */}
-                <div className="p-4 bg-muted/30 rounded-lg border">
-                  <h4 className="font-semibold text-sm text-foreground flex items-center gap-2 mb-4">
-                    <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                    Monthly Fuel Usage ({viewingRecord.unit})
+          {/* Content */}
+          {viewingRecord && (
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+              {/* Basic Info Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
+                  <h4 className="font-semibold text-sm text-foreground flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                    Basic Information
                   </h4>
-                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                    {[
-                      { key: 'january', label: 'Jan' },
-                      { key: 'february', label: 'Feb' },
-                      { key: 'maret', label: 'Mar' },
-                      { key: 'april', label: 'Apr' },
-                      { key: 'may', label: 'May' },
-                      { key: 'june', label: 'Jun' },
-                      { key: 'july', label: 'Jul' },
-                      { key: 'augustus', label: 'Aug' },
-                      { key: 'september', label: 'Sep' },
-                      { key: 'october', label: 'Oct' },
-                      { key: 'november', label: 'Nov' },
-                      { key: 'december', label: 'Dec' }
-                    ].map(month => (
-                      <div key={month.key} className="p-2 bg-background rounded border text-center">
-                        <p className="text-xs text-muted-foreground mb-1">{month.label}</p>
-                        <p className="text-sm font-mono font-medium">
-                          {parseNumberWithComma(viewingRecord[month.key as keyof GHGScopeOneData] as string).toFixed(2)}
-                        </p>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Entity</span>
+                      <span className="text-sm font-medium text-right max-w-[200px]">{viewingRecord.entity}</span>
+                    </div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Facility</span>
+                      <span className="text-sm font-medium text-right max-w-[200px]">{viewingRecord.facility}</span>
+                    </div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Lease Status</span>
+                      <span className="text-sm font-medium">{viewingRecord.own_facility || '-'}</span>
+                    </div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Year</span>
+                      <span className="text-sm font-medium">{viewingRecord.date_collection}</span>
+                    </div>
                   </div>
                 </div>
 
-                {/* Emission Results */}
-                <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 rounded-lg border border-green-200 dark:border-green-800">
-                  <h4 className="font-semibold text-sm text-green-800 dark:text-green-200 flex items-center gap-2 mb-4">
-                    <Calculator className="h-4 w-4" />
-                    Calculated Emissions
+                <div className="space-y-4 p-4 bg-muted/30 rounded-lg border">
+                  <h4 className="font-semibold text-sm text-foreground flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    Fuel Information
                   </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
-                      <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord.fuel_usage).toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">{viewingRecord.unit}</p>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Fuel Type</span>
+                      <Badge variant="outline" style={{ borderColor: FUEL_COLORS[viewingRecord.types_of_fuel] }}>
+                        {viewingRecord.types_of_fuel}
+                      </Badge>
                     </div>
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Fuel Consumption</p>
-                      <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord['fuel_consumption(Kg)']).toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                      <p className="text-xs text-muted-foreground">Kg</p>
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Own Facility</span>
+                      <span className="text-sm font-medium">{viewingRecord.own_facility || '-'}</span>
                     </div>
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Energy</p>
-                      <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord['energy_consumption(MJ)']).toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                      <p className="text-xs text-muted-foreground">MJ</p>
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Classification</span>
+                      <span className="text-sm font-medium">{viewingRecord.classification_fuel_rawmaterial || '-'}</span>
                     </div>
-                    <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
-                      <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
-                      <p className="text-lg font-bold text-green-700 dark:text-green-400">{parseNumberWithComma(viewingRecord['ghg_emissions(tCO2eq)']).toFixed(2)}</p>
-                      <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Emission Activities</span>
+                      <span className="text-sm font-medium text-right max-w-[150px]">{viewingRecord.emissions_activites || '-'}</span>
+                    </div>
+
+                    {/* Show Detailed Description Fuel above Detailed Description */}
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Detailed Description Fuel</span>
+                      <span className="text-sm font-medium text-right max-w-[200px]">{viewingRecord.detailed_desc_fuel || '-'}</span>
+                    </div>
+
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Detailed Description</span>
+                      <span className="text-sm font-medium text-right max-w-[200px]">{viewingRecord.detailed_desc || '-'}</span>
+                    </div>
+
+                    <div className="flex justify-between items-start">
+                      <span className="text-sm text-muted-foreground">Unit</span>
+                      <span className="text-sm font-medium">{viewingRecord.unit}</span>
                     </div>
                   </div>
-
-                  {/* Gas Breakdown */}
-                  <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800">
-                    <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-3">Individual Gas Emissions (Kg)</p>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-red-600 dark:text-red-400">CO₂</span>
-                        </div>
-                        <span className="font-mono font-medium">{parseNumberWithComma(viewingRecord.kgCO2).toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-orange-600 dark:text-orange-400">CH₄</span>
-                        </div>
-                        <span className="font-mono font-medium">{parseNumberWithComma(viewingRecord.kgCH4).toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400">N₂O</span>
-                        </div>
-                        <span className="font-mono font-medium">{parseNumberWithComma(viewingRecord.kgN2O).toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Meta Info */}
-                <div className="flex items-center justify-between text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg">
-                  <span>Updated by: {viewingRecord.updated_by || 'N/A'}</span>
-                  <span>Last updated: {viewingRecord.updated_date || 'N/A'}</span>
                 </div>
               </div>
-            )}
 
-<SheetFooter className="border-t bg-muted/30 px-6 py-4">
+              {/* Monthly Usage */}
+              <div className="p-4 bg-muted/30 rounded-lg border">
+                <h4 className="font-semibold text-sm text-foreground flex items-center gap-2 mb-4">
+                  <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                  Monthly Fuel Usage ({viewingRecord.unit})
+                </h4>
+                <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                  {[
+                    { key: 'january', label: 'Jan' },
+                    { key: 'february', label: 'Feb' },
+                    { key: 'maret', label: 'Mar' },
+                    { key: 'april', label: 'Apr' },
+                    { key: 'may', label: 'May' },
+                    { key: 'june', label: 'Jun' },
+                    { key: 'july', label: 'Jul' },
+                    { key: 'augustus', label: 'Aug' },
+                    { key: 'september', label: 'Sep' },
+                    { key: 'october', label: 'Oct' },
+                    { key: 'november', label: 'Nov' },
+                    { key: 'december', label: 'Dec' }
+                  ].map(month => (
+                    <div key={month.key} className="p-2 bg-background rounded border text-center">
+                      <p className="text-xs text-muted-foreground mb-1">{month.label}</p>
+                      <p className="text-sm font-mono font-medium">
+                        {parseNumberWithComma(viewingRecord[month.key as keyof GHGScopeOneData] as string).toFixed(2)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Emission Results */}
+              <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 rounded-lg border border-green-200 dark:border-green-800">
+                <h4 className="font-semibold text-sm text-green-800 dark:text-green-200 flex items-center gap-2 mb-4">
+                  <Calculator className="h-4 w-4" />
+                  Calculated Emissions
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
+                    <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord.fuel_usage).toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">{viewingRecord.unit}</p>
+                  </div>
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Fuel Consumption</p>
+                    <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord['fuel_consumption(Kg)']).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-muted-foreground">Kg</p>
+                  </div>
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Energy</p>
+                    <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord['energy_consumption(MJ)']).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-muted-foreground">MJ</p>
+                  </div>
+                  <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
+                    <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{parseNumberWithComma(viewingRecord['ghg_emissions(tCO2eq)']).toFixed(2)}</p>
+                    <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
+                  </div>
+                </div>
+
+                {/* Gas Breakdown */}
+                <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800">
+                  <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-3">Individual Gas Emissions (Kg)</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-red-600 dark:text-red-400">CO₂</span>
+                      </div>
+                      <span className="font-mono font-medium">{parseNumberWithComma(viewingRecord.kgCO2).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-orange-600 dark:text-orange-400">CH₄</span>
+                      </div>
+                      <span className="font-mono font-medium">{parseNumberWithComma(viewingRecord.kgCH4).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400">N₂O</span>
+                      </div>
+                      <span className="font-mono font-medium">{parseNumberWithComma(viewingRecord.kgN2O).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Meta Info */}
+                <div className="flex items-center justify-between text-xs text-muted-foreground p-3 bg-muted/30 rounded-lg">
+                <span>Updated by: {viewingRecord.updated_by || 'N/A'}</span>
+                <span>Last updated: {formatDateTime(viewingRecord.updated_date)}</span>
+              </div>
+            </div>
+          )}
+
+          <SheetFooter className="border-t bg-muted/30 px-6 py-4">
             <Button variant="outline" onClick={() => setIsViewModalOpen(false)}>
               Close
             </Button>
@@ -2228,7 +2374,7 @@ export default function ScopeOneContent() {
         </SheetContent>
       </Sheet>
 
-{/* Edit Record Sheet - Same structure as Add Sheet */}
+      {/* Edit Record Sheet - Same structure as Add Sheet */}
       <Sheet open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <SheetContent className="w-[95vw] max-w-[1400px] sm:max-w-[1400px] overflow-hidden flex flex-col p-0">
           {/* Fixed Header */}
@@ -2244,410 +2390,488 @@ export default function ScopeOneContent() {
                 Edit record ID: {editFormData.id}. Update the data below. Emissions will be recalculated automatically.
               </SheetDescription>
             </SheetHeader>
-            </div>
+          </div>
 
-            {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-              {/* Section 1: Basic Information */}
-              <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Basic Information</h3>
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            {/* Section 1: Basic Information */}
+            <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_entity" className="text-sm font-medium">Entity *</Label>
-                    <Popover open={editOpenEntityCombobox} onOpenChange={setEditOpenEntityCombobox}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={editOpenEntityCombobox}
-                          className="w-full justify-between h-10"
-                        >
-                          <span className="truncate text-left">{editSelectedEntity || "Select entity..."}</span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0 max-h-[320px] overflow-auto">
-                        <Command>
-                          <CommandInput placeholder="Search entity..." />
-                          <CommandList>
-                            <CommandEmpty>No entity found.</CommandEmpty>
-                            <CommandGroup>
-                              {Array.from(new Set(businessData.map(item => item.entity))).map((entity) => (
+                <h3 className="text-lg font-semibold text-foreground">Basic Information</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_entity" className="text-sm font-medium">Entity *</Label>
+                  <Popover open={editOpenEntityCombobox} onOpenChange={setEditOpenEntityCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={editOpenEntityCombobox}
+                        className="w-full justify-between h-10"
+                      >
+                        <span className="truncate text-left">{editSelectedEntity || "Select entity..."}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0 max-h-[320px] overflow-auto">
+                      <Command>
+                        <CommandInput placeholder="Search entity..." />
+                        <CommandList>
+                          <CommandEmpty>
+                            {businessData.length === 0 ? "No business data available in database." : "No entity found."}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {Array.from(new Set(businessData.map(item => item.entity))).map((entity) => (
+                              <CommandItem
+                                key={entity}
+                                value={entity}
+                                onSelect={(currentValue) => {
+                                  setEditSelectedEntity(currentValue === editSelectedEntity ? "" : currentValue)
+                                  setEditFormData({ ...editFormData, entity: currentValue })
+                                  setEditOpenEntityCombobox(false)
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", editSelectedEntity === entity ? "opacity-100" : "opacity-0")} />
+                                <span className="truncate">{entity}</span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_facility" className="text-sm font-medium">Facility *</Label>
+                  <Popover open={editOpenFacilityCombobox} onOpenChange={setEditOpenFacilityCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={editOpenFacilityCombobox}
+                        className="w-full justify-between h-10"
+                        disabled={!editSelectedEntity}
+                      >
+                        <span className="truncate text-left">{editSelectedFacility || (editSelectedEntity ? "Select facility..." : "Select entity first")}</span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0 max-h-[320px] overflow-auto">
+                      <Command>
+                        <CommandInput placeholder="Search facility..." />
+                        <CommandList>
+                          <CommandEmpty>
+                            {businessData.length === 0 ? "No business data available in database." : "No facility found for selected entity."}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {Array.from(new Set(businessData.filter(item => !editSelectedEntity || item.entity === editSelectedEntity).map(item => item.facility)))
+                              .map((facility, index) => (
                                 <CommandItem
-                                  key={entity}
-                                  value={entity}
+                                  key={`${editSelectedEntity}-${facility}-${index}`}
+                                  value={facility}
                                   onSelect={(currentValue) => {
-                                    setEditSelectedEntity(currentValue === editSelectedEntity ? "" : currentValue)
-                                    setEditFormData({ ...editFormData, entity: currentValue })
-                                    setEditOpenEntityCombobox(false)
+                                    setEditSelectedFacility(currentValue === editSelectedFacility ? "" : currentValue)
+                                    setEditFormData({ ...editFormData, facility: currentValue })
+                                    setEditOpenFacilityCombobox(false)
                                   }}
                                 >
-                                  <Check className={cn("mr-2 h-4 w-4", editSelectedEntity === entity ? "opacity-100" : "opacity-0")} />
-                                  <span className="truncate">{entity}</span>
+                                  <Check className={cn("mr-2 h-4 w-4", editSelectedFacility === facility ? "opacity-100" : "opacity-0")} />
+                                  <span className="truncate">{facility}</span>
                                 </CommandItem>
                               ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_lease_status" className="text-sm font-medium">Lease Status</Label>
+                  <div className="w-full h-10 px-3 flex items-center rounded-md border bg-muted">
+                    <span className="truncate text-sm text-foreground">{editLeaseStatusDisplay || '-'}</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_facility" className="text-sm font-medium">Facility *</Label>
-                    <Popover open={editOpenFacilityCombobox} onOpenChange={setEditOpenFacilityCombobox}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={editOpenFacilityCombobox}
-                          className="w-full justify-between h-10"
-                          disabled={!editSelectedEntity}
-                        >
-                          <span className="truncate text-left">{editSelectedFacility || (editSelectedEntity ? "Select facility..." : "Select entity first")}</span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0 max-h-[320px] overflow-auto">
-                        <Command>
-                          <CommandInput placeholder="Search facility..." />
-                          <CommandList>
-                            <CommandEmpty>No facility found for selected entity.</CommandEmpty>
-                            <CommandGroup>
-                              {businessData
-                                .filter(item => !editSelectedEntity || item.entity === editSelectedEntity)
-                                .map((item, index) => (
-                                  <CommandItem
-                                    key={`${item.entity}-${item.facility}-${index}`}
-                                    value={item.facility}
-                                    onSelect={(currentValue) => {
-                                      setEditSelectedFacility(currentValue === editSelectedFacility ? "" : currentValue)
-                                      setEditFormData({ ...editFormData, facility: currentValue })
-                                      setEditOpenFacilityCombobox(false)
-                                    }}
-                                  >
-                                    <Check className={cn("mr-2 h-4 w-4", editSelectedFacility === item.facility ? "opacity-100" : "opacity-0")} />
-                                    <span className="truncate">{item.facility}</span>
-                                  </CommandItem>
-                                ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_own_facility" className="text-sm font-medium">Lease Status</Label>
-                    <Select value={editFormData.own_facility} onValueChange={(value) => setEditFormData({ ...editFormData, own_facility: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select lease status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ownFacilityOptions.map(option => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_year" className="text-sm font-medium">Year *</Label>
-                    <Input
-                      value={editFormData.date_collection}
-                      onChange={(e) => setEditFormData({ ...editFormData, date_collection: e.target.value })}
-                      placeholder="e.g., 2024"
-                      className="h-10"
-                    />
-                  </div>
+                  <p className="text-xs text-muted-foreground">Lease status is read-only and comes from business master data.</p>
+                  {businessData.length > 0 && !editLeaseStatusDisplay && editSelectedEntity && editSelectedFacility && (
+                    <p className="text-xs text-red-600">Lease status not found for selected entity/facility.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_year" className="text-sm font-medium">Year *</Label>
+                  <Input
+                    value={editFormData.date_collection}
+                    onChange={(e) => setEditFormData({ ...editFormData, date_collection: e.target.value })}
+                    placeholder="e.g., 2024"
+                    className="h-10"
+                  />
                 </div>
               </div>
-
-              {/* Fuel Information */}
-              <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">Fuel Information</h3>
-                </div>
-                <div className="grid grid-cols-1 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_types_of_fuel" className="text-sm font-medium">Type of Fuel <span className="text-red-500">*</span></Label>
-                    <Select value={editFormData.types_of_fuel} onValueChange={(value) => setEditFormData({ ...editFormData, types_of_fuel: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select fuel type" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[320px] overflow-auto">
-                        {Object.keys(FUEL_COLORS).map(fuelType => (
-                          <SelectItem key={fuelType} value={fuelType}>
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: FUEL_COLORS[fuelType] }} />
-                              <span className="truncate">{fuelType}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_own_facility_fuel" className="text-sm font-medium">Own Facility</Label>
-                    <Select value={editFormData.own_facility} onValueChange={(value) => setEditFormData({ ...editFormData, own_facility: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select ownership" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ownFacilityOptions.map(option => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_classification_fuel_rawmaterial" className="text-sm font-medium">Classification Fuel</Label>
-                    <Select value={editFormData.classification_fuel_rawmaterial} onValueChange={(value) => setEditFormData({ ...editFormData, classification_fuel_rawmaterial: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select fuel classification" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Fuel">Fuel</SelectItem>
-                        <SelectItem value="Raw Material">Raw Material</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_emissions_activites" className="text-sm font-medium">Emission Activities</Label>
-                    <Select value={editFormData.emissions_activites} onValueChange={(value) => setEditFormData({ ...editFormData, emissions_activites: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue placeholder="Select emission activity" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {emissionActivitiesOptions.map(option => (
-                          <SelectItem key={option} value={option}>
-                            {option}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_detailed_description" className="text-sm font-medium">Detailed Description</Label>
-                    <Input
-                      id="edit_detailed_description"
-                      placeholder="Enter detailed description of fuel usage"
-                      value={editFormData.detailed_desc || ''}
-                      onChange={(e) => setEditFormData({ ...editFormData, detailed_desc: e.target.value })}
-                      className="w-full h-10"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_unit" className="text-sm font-medium">Unit</Label>
-                    <Select value={editFormData.unit} onValueChange={(value) => setEditFormData({ ...editFormData, unit: value })}>
-                      <SelectTrigger className="w-full h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="㎥">㎥ (Cubic Meter)</SelectItem>
-                        <SelectItem value="L">L (Liter)</SelectItem>
-                        <SelectItem value="kg">kg (Kilogram)</SelectItem>
-                        <SelectItem value="ton">ton (Ton)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Monthly Usage Data */}
-              <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-foreground">Monthly Fuel Usage</h3>
-                    <p className="text-sm text-muted-foreground">Enter consumption data for each month ({editFormData.unit})</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {[
-                    { key: 'january', label: 'Jan' },
-                    { key: 'february', label: 'Feb' },
-                    { key: 'maret', label: 'Mar' },
-                    { key: 'april', label: 'Apr' },
-                    { key: 'may', label: 'May' },
-                    { key: 'june', label: 'Jun' },
-                    { key: 'july', label: 'Jul' },
-                    { key: 'augustus', label: 'Aug' },
-                    { key: 'september', label: 'Sep' },
-                    { key: 'october', label: 'Oct' },
-                    { key: 'november', label: 'Nov' },
-                    { key: 'december', label: 'Dec' },
-                  ].map(month => (
-                    <div key={month.key} className="space-y-1.5">
-                      <Label htmlFor={`edit_${month.key}`} className="text-xs font-medium text-center block text-muted-foreground">
-                        {month.label}
-                      </Label>
-                      <Input
-                        id={`edit_${month.key}`}
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={editFormData[month.key as keyof typeof editFormData]}
-                        onChange={(e) => setEditFormData({ ...editFormData, [month.key]: e.target.value })}
-                        className="text-sm h-10 text-center font-mono"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Real-time Calculation Preview */}
-              {editFormData.types_of_fuel && (
-                <div className="space-y-5 p-6 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 rounded-xl border border-green-200 dark:border-green-800 shadow-sm animate-in fade-in duration-500">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
-                        <Calculator className="h-5 w-5 text-green-600 dark:text-green-400" />
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-sm text-green-800 dark:text-green-200">Calculated Emissions</h4>
-                        <p className="text-xs text-green-600 dark:text-green-400">Real-time emissions (IPCC)</p>
-                      </div>
-                    </div>
-                    <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs px-2 py-0.5 flex-shrink-0">
-                      Live
-                    </Badge>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
-                      <p className="text-lg font-bold">{editCalculatedPreview.fuel_usage.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">{editFormData.unit}</p>
-                    </div>
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Fuel Consumption</p>
-                      <p className="text-lg font-bold">{editCalculatedPreview.fuel_consumption.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                      <p className="text-xs text-muted-foreground">Kg</p>
-                    </div>
-                    <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Energy</p>
-                      <p className="text-lg font-bold">{editCalculatedPreview.energy_consumption.toLocaleString(undefined, {maximumFractionDigits: 2})}</p>
-                      <p className="text-xs text-muted-foreground">MJ</p>
-                    </div>
-                    <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
-                      <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
-                      <p className="text-lg font-bold text-green-700 dark:text-green-400">{editCalculatedPreview.ghg_emissions.toFixed(2)}</p>
-                      <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
-                    </div>
-                  </div>
-
-                  {/* Gas Breakdown */}
-                  <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800">
-                    <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-3">Individual Gas Emissions (Kg)</p>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-red-600 dark:text-red-400">CO₂</span>
-                        </div>
-                        <span className="font-mono font-medium">{editCalculatedPreview.kgCO2.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-orange-600 dark:text-orange-400">CH₄</span>
-                        </div>
-                        <span className="font-mono font-medium">{editCalculatedPreview.kgCH4.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                      <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
-                        <div className="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center">
-                          <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400">N₂O</span>
-                        </div>
-                        <span className="font-mono font-medium">{editCalculatedPreview.kgN2O.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
-            <SheetFooter className="flex flex-col sm:flex-row gap-3 border-t bg-muted/30 px-6 py-4">
-              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto ml-auto">
-                <Button variant="outline" onClick={() => setIsEditModalOpen(false)} disabled={isEditSaving} size="lg" className="flex-1 sm:flex-none">
-                  <X className="mr-2 h-4 w-4" />
-                  Cancel
-                </Button>
-                <Button
-                  onClick={async () => {
-                    setIsEditSaving(true)
-                    try {
-                      // Update the record in the data array
-                      const updatedRecord = {
-                        ...editFormData,
-                        fuel_usage: editCalculatedPreview.fuel_usage.toString().replace('.', ','),
-                        'fuel_consumption(Kg)': editCalculatedPreview.fuel_consumption.toString().replace('.', ','),
-                        'energy_consumption(MJ)': editCalculatedPreview.energy_consumption.toString().replace('.', ','),
-                        'ghg_emissions(tCO2eq)': editCalculatedPreview.ghg_emissions.toString().replace('.', ','),
-                        kgCO2: editCalculatedPreview.kgCO2.toString().replace('.', ','),
-                        kgCH4: editCalculatedPreview.kgCH4.toString().replace('.', ','),
-                        kgN2O: editCalculatedPreview.kgN2O.toString().replace('.', ','),
-                        updated_by: 'Current User',
-                        updated_date: new Date().toISOString().split('T')[0]
-                      }
-
-                      await new Promise(resolve => setTimeout(resolve, 1000))
-
-                      setData(prevData => prevData.map(item =>
-                        item.id === editFormData.id ? updatedRecord as GHGScopeOneData : item
-                      ))
-
-                      toast({
-                        title: "Success!",
-                        description: `Record ${editFormData.id} has been updated successfully.`,
-                      })
-
-                      setIsEditModalOpen(false)
-                    } catch (error) {
-                      toast({
-                        title: "Error",
-                        description: "Failed to update record. Please try again.",
-                        variant: "destructive"
-                      })
-                    } finally {
-                      setIsEditSaving(false)
-                    }
-                  }}
-                  disabled={isEditSaving || !editFormData.entity || !editFormData.facility || !editFormData.types_of_fuel}
-                  size="lg"
-                  className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700"
-                >
-                  {isEditSaving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="mr-2 h-4 w-4" />
-                      Save Changes
-                    </>
-                  )}
-                </Button>
+            {/* Fuel Information */}
+            <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-foreground">Fuel Information</h3>
               </div>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
-      </div>
-    )
+              <div className="grid grid-cols-1 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="edit_types_of_fuel" className="text-sm font-medium">Type of Fuel <span className="text-red-500">*</span></Label>
+                  <Select value={editFormData.types_of_fuel} onValueChange={(value) => setEditFormData({ ...editFormData, types_of_fuel: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="Select fuel type" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[320px] overflow-auto">
+                      {Object.keys(FUEL_COLORS).map(fuelType => (
+                        <SelectItem key={fuelType} value={fuelType}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: FUEL_COLORS[fuelType] }} />
+                            <span className="truncate">{fuelType}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Move Unit under Type in edit form */}
+                <div className="space-y-2">
+                  <Label htmlFor="edit_unit" className="text-sm font-medium">Unit</Label>
+                  <Select value={editFormData.unit} onValueChange={(value) => setEditFormData({ ...editFormData, unit: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="㎥">㎥ (Cubic Meter)</SelectItem>
+                      <SelectItem value="L">L (Liter)</SelectItem>
+                      <SelectItem value="kg">kg (Kilogram)</SelectItem>
+                      <SelectItem value="ton">ton (Ton)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_own_facility_fuel" className="text-sm font-medium">Own Facility</Label>
+                  <Select value={editFormData.own_facility} onValueChange={(value) => setEditFormData({ ...editFormData, own_facility: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="Select ownership" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ownFacilityOptions.map(option => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_classification_fuel_rawmaterial" className="text-sm font-medium">Classification Fuel</Label>
+                  <Select value={editFormData.classification_fuel_rawmaterial} onValueChange={(value) => setEditFormData({ ...editFormData, classification_fuel_rawmaterial: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="Select fuel classification" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Fuel">Fuel</SelectItem>
+                      <SelectItem value="Raw Material">Raw Material</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_emissions_activites" className="text-sm font-medium">Emission Activities</Label>
+                  <Select value={editFormData.emissions_activites} onValueChange={(value) => setEditFormData({ ...editFormData, emissions_activites: value })}>
+                    <SelectTrigger className="w-full h-10">
+                      <SelectValue placeholder="Select emission activity" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {emissionActivitiesOptions.map(option => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* New: Edit Detailed Description Fuel */}
+                <div className="space-y-2">
+                  <Label htmlFor="edit_detailed_desc_fuel" className="text-sm font-medium">Detailed Description Fuel</Label>
+                  <Input
+                    id="edit_detailed_desc_fuel"
+                    placeholder="Enter detailed fuel description"
+                    value={editFormData.detailed_desc_fuel || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, detailed_desc_fuel: e.target.value })}
+                    className="w-full h-10"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit_detailed_description" className="text-sm font-medium">Detailed Description</Label>
+                  <Input
+                    id="edit_detailed_description"
+                    placeholder="Enter detailed description of fuel usage"
+                    value={editFormData.detailed_desc || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, detailed_desc: e.target.value })}
+                    className="w-full h-10"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Monthly Usage Data */}
+            <div className="space-y-5 p-6 bg-card rounded-xl border shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">Monthly Fuel Usage</h3>
+                  <p className="text-sm text-muted-foreground">Enter consumption data for each month ({editFormData.unit})</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                {[
+                  { key: 'january', label: 'Jan' },
+                  { key: 'february', label: 'Feb' },
+                  { key: 'maret', label: 'Mar' },
+                  { key: 'april', label: 'Apr' },
+                  { key: 'may', label: 'May' },
+                  { key: 'june', label: 'Jun' },
+                  { key: 'july', label: 'Jul' },
+                  { key: 'augustus', label: 'Aug' },
+                  { key: 'september', label: 'Sep' },
+                  { key: 'october', label: 'Oct' },
+                  { key: 'november', label: 'Nov' },
+                  { key: 'december', label: 'Dec' },
+                ].map(month => (
+                  <div key={month.key} className="space-y-1.5">
+                    <Label htmlFor={`edit_${month.key}`} className="text-xs font-medium text-center block text-muted-foreground">
+                      {month.label}
+                    </Label>
+                    <Input
+                      id={`edit_${month.key}`}
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={editFormData[month.key as keyof typeof editFormData]}
+                      onChange={(e) => setEditFormData({ ...editFormData, [month.key]: e.target.value })}
+                      className="text-sm h-10 text-center font-mono"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Real-time Calculation Preview */}
+            {editFormData.types_of_fuel && (
+              <div className="space-y-5 p-6 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/20 dark:via-emerald-950/20 dark:to-teal-950/20 rounded-xl border border-green-200 dark:border-green-800 shadow-sm animate-in fade-in duration-500">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-900/40 flex items-center justify-center flex-shrink-0">
+                      <Calculator className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-sm text-green-800 dark:text-green-200">Calculated Emissions</h4>
+                      <p className="text-xs text-green-600 dark:text-green-400">Real-time emissions (IPCC)</p>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs px-2 py-0.5 flex-shrink-0">
+                    Live
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
+                    <p className="text-lg font-bold">{editCalculatedPreview.fuel_usage.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">{editFormData.unit}</p>
+                  </div>
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Fuel Consumption</p>
+                    <p className="text-lg font-bold">{editCalculatedPreview.fuel_consumption.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-muted-foreground">Kg</p>
+                  </div>
+                  <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
+                    <p className="text-xs text-muted-foreground mb-1">Energy</p>
+                    <p className="text-lg font-bold">{editCalculatedPreview.energy_consumption.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                    <p className="text-xs text-muted-foreground">MJ</p>
+                  </div>
+                  <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
+                    <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{editCalculatedPreview.ghg_emissions.toFixed(2)}</p>
+                    <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
+                  </div>
+                </div>
+
+                {/* Gas Breakdown */}
+                <div className="mt-4 pt-4 border-t border-green-200 dark:border-green-800">
+                  <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-3">Individual Gas Emissions (Kg)</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-red-600 dark:text-red-400">CO₂</span>
+                      </div>
+                      <span className="font-mono font-medium">{editCalculatedPreview.kgCO2.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-orange-600 dark:text-orange-400">CH₄</span>
+                      </div>
+                      <span className="font-mono font-medium">{editCalculatedPreview.kgCH4.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center gap-3 p-2 bg-white/60 dark:bg-gray-900/60 rounded border">
+                      <div className="w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/40 flex items-center justify-center">
+                        <span className="text-xs font-bold text-yellow-700 dark:text-yellow-400">N₂O</span>
+                      </div>
+                      <span className="font-mono font-medium">{editCalculatedPreview.kgN2O.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <SheetFooter className="flex flex-col sm:flex-row gap-3 border-t bg-muted/30 px-6 py-4">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto ml-auto">
+              <Button variant="outline" onClick={() => setIsEditModalOpen(false)} disabled={isEditSaving} size="lg" className="flex-1 sm:flex-none">
+                <X className="mr-2 h-4 w-4" />
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  setIsEditSaving(true)
+                  try {
+                        // Get current user to set updated_by for edit
+                        let updaterNameEdit = 'Unknown'
+                        try {
+                          const { data: userData, error: userError } = await supabase.auth.getUser()
+                          if (!userError && userData && (userData as any).user) {
+                            const u: any = (userData as any).user
+                            updaterNameEdit = u.user_metadata?.nickname || u.user_metadata?.full_name || u.email || 'Unknown'
+                          } else if (userError) {
+                            console.warn('supabase.auth.getUser() error (edit):', userError)
+                          }
+                        } catch (e) {
+                          console.warn('Failed to get supabase user for updated_by (edit):', e)
+                        }
+                        // Prepare payload for Supabase update (include detailed_desc_fuel)
+                        const updatePayload: any = {
+                          entity: editFormData.entity,
+                          facility: editFormData.facility,
+                          own_facility: editFormData.own_facility,
+                          classification_fuel_rawmaterial: editFormData.classification_fuel_rawmaterial,
+                          emissions_activites: editFormData.emissions_activites,
+                          detailed_desc: editFormData.detailed_desc,
+                          types_of_fuel: editFormData.types_of_fuel,
+                          detailed_desc_fuel: editFormData.detailed_desc_fuel,
+                          date_collection: editFormData.date_collection,
+                          january: editFormData.january,
+                          february: editFormData.february,
+                          maret: editFormData.maret,
+                          april: editFormData.april,
+                          may: editFormData.may,
+                          june: editFormData.june,
+                          july: editFormData.july,
+                          augustus: editFormData.augustus,
+                          september: editFormData.september,
+                          october: editFormData.october,
+                          november: editFormData.november,
+                          december: editFormData.december,
+                          unit: editFormData.unit,
+                          fuel_usage: editCalculatedPreview.fuel_usage.toString().replace('.', ','),
+                          'fuel_consumption(Kg)': editCalculatedPreview.fuel_consumption.toString().replace('.', ','),
+                          'energy_consumption(MJ)': editCalculatedPreview.energy_consumption.toString().replace('.', ','),
+                          'ghg_emissions(tCO2eq)': editCalculatedPreview.ghg_emissions.toString().replace('.', ','),
+                          kgCO2: editCalculatedPreview.kgCO2.toString().replace('.', ','),
+                          kgCH4: editCalculatedPreview.kgCH4.toString().replace('.', ','),
+                          kgN2O: editCalculatedPreview.kgN2O.toString().replace('.', ','),
+                          updated_by: updaterNameEdit,
+                          updated_date: new Date().toISOString()
+                        }
+
+                        // Diagnostic: ensure supabase client exists for update
+                        if (!supabase) {
+                          console.error('Supabase client is not initialized (supabase is falsy)')
+                        }
+
+                        const { data: updateResult, error: updateError } = await supabase
+                          .from('ghg_scopeone')
+                          .update(updatePayload)
+                          .eq('id', editFormData.id)
+                          .select()
+
+                        if (updateError) {
+                          try {
+                            console.error('Supabase update error (detailed):', JSON.stringify(updateError, Object.getOwnPropertyNames(updateError), 2))
+                          } catch (e) {
+                            console.error('Supabase update error (raw):', updateError)
+                          }
+
+                          const msg = updateError?.message || updateError?.details || updateError?.hint || JSON.stringify(updateError)
+                          toast({
+                            title: 'Supabase update error',
+                            description: typeof msg === 'string' ? msg : 'See console for details',
+                            variant: 'destructive'
+                          })
+
+                          throw updateError
+                        }
+
+                        const updated = Array.isArray(updateResult) && updateResult.length > 0 ? updateResult[0] : { id: editFormData.id, ...updatePayload }
+
+                        setData(prevData => prevData.map(item =>
+                          item.id === editFormData.id ? updated as GHGScopeOneData : item
+                        ))
+
+                        toast({
+                          title: "Success!",
+                          description: `Record ${editFormData.id} has been updated successfully.`,
+                        })
+
+                        setIsEditModalOpen(false)
+                  } catch (error) {
+                    toast({
+                      title: "Error",
+                      description: "Failed to update record. Please try again.",
+                      variant: "destructive"
+                    })
+                  } finally {
+                    setIsEditSaving(false)
+                  }
+                }}
+                disabled={isEditSaving || !editFormData.entity || !editFormData.facility || !editFormData.types_of_fuel}
+                size="lg"
+                className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700"
+              >
+                {isEditSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Check className="mr-2 h-4 w-4" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </div>
+  )
 }
