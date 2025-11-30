@@ -240,22 +240,9 @@ export default function ScopeOneContent() {
             console.warn('Supabase env vars may be missing: NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
           }
         setLoading(true)
-        // Fetch directly from Supabase table `ghg_scopeone` instead of calling API route
-        try {
-          const { data: ghgData, error } = await supabase
-            .from('ghg_scopeone')
-            .select('*')
-
-          if (error) {
-            console.error('Supabase fetch error for ghg_scopeone:', error)
-            setData([])
-          } else {
-            setData(ghgData || [])
-          }
-        } catch (err) {
-          console.error('Unexpected error fetching ghg_scopeone:', err)
-          setData([])
-        }
+        const response = await fetch('/api/ghg/scope-one')
+        const result = await response.json()
+        setData(result.data || [])
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {
@@ -433,14 +420,9 @@ export default function ScopeOneContent() {
         setData(prevData => [...prevData, created as GHGScopeOneData])
       } else {
         try {
-          const { data: ghgData, error: fetchError } = await supabase
-            .from('ghg_scopeone')
-            .select('*')
-
-          if (fetchError) {
-            console.error('Supabase refresh error for ghg_scopeone:', fetchError)
-          }
-          setData(ghgData || [])
+          const resp = await fetch('/api/ghg/scope-one')
+          const json = await resp.json()
+          setData(json.data || [])
         } catch (e) {
           console.error('Failed to refresh data after insert fallback:', e)
         }
@@ -1473,7 +1455,7 @@ export default function ScopeOneContent() {
                 <Button variant="default" onClick={() => setIsAddModalOpen(true)} className="h-8 sm:h-9 text-xs sm:text-sm">
                   <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> 
                   <span className="hidden xs:inline">Add Record</span>
-                  <span className="xs:hidden">Add Record</span>
+                  <span className="xs:hidden">Add</span>
                 </Button>
               </div>
             </div>

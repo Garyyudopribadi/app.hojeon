@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from './supabase'
 
@@ -19,6 +19,11 @@ export function useAuth() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const router = useRouter()
+  const routerRef = useRef(router)
+
+  useEffect(() => {
+    routerRef.current = router
+  }, [router])
 
   useEffect(() => {
     let mounted = true
@@ -27,7 +32,7 @@ export function useAuth() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) {
-          router.push('/')
+          routerRef.current.push('/')
           return
         }
 
@@ -43,7 +48,7 @@ export function useAuth() {
           console.error('Error fetching profile:', msg, error)
           // fail-safe: sign the user out / redirect to login
           try {
-            router.push('/')
+            routerRef.current.push('/')
           } catch (e) {
             console.error('Redirect failed after profile error:', e)
           }
@@ -56,7 +61,7 @@ export function useAuth() {
         }
       } catch (error) {
         console.error('Error checking auth:', error)
-        router.push('/')
+        routerRef.current.push('/')
       }
     }
 
@@ -64,7 +69,7 @@ export function useAuth() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
-        router.push('/')
+        routerRef.current.push('/')
       } else if (event === 'SIGNED_IN' && session?.user) {
         // when user signs in, refresh profile
         checkAuth()
@@ -75,7 +80,7 @@ export function useAuth() {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [router])
+  }, [])
 
   return { loading, profile }
 }
