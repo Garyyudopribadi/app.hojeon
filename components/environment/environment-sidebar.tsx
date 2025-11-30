@@ -47,15 +47,19 @@ const data = {
       icon: Leaf,
       items: [
         {
-          title: "Raw Data Scope 1",
+          title: "Scope 1",
           url: "/compliance/environment/ghg/scope-one",
         },
         {
-          title: "Raw Data Scope 2",
-          url: "/compliance/environment/ghg/scope-two",
+          title: "Scope 2 - Location",
+          url: "/compliance/environment/ghg/scope-two-location",
         },
         {
-          title: "Raw Data Scope 3",
+          title: "Scope 2 - Market",
+          url: "/compliance/environment/ghg/scope-two-market",
+        },
+        {
+          title: "Scope 3",
           url: "/compliance/environment/ghg/scope-three",
         },
       ],

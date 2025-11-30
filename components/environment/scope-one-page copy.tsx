@@ -623,9 +623,9 @@ export default function ScopeOnePage() {
     }, 0)
 
     return {
-      totalEmissions: totalEmissions.toFixed(2),
-      totalEnergyConsumption: totalEnergyConsumption.toFixed(2),
-      totalFuelConsumption: totalFuelConsumption.toFixed(2),
+      totalEmissions: formatNumber(totalEmissions),
+      totalEnergyConsumption: formatNumber(totalEnergyConsumption),
+      totalFuelConsumption: formatNumber(totalFuelConsumption),
       totalRecords: filteredData.length
     }
   }, [data, filterYear, filterEntity, filterFacility])
@@ -1225,7 +1225,7 @@ export default function ScopeOnePage() {
                                 {fuelType}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {totalEmissions.toFixed(2)} tCO2eq
+                                {formatNumber(totalEmissions)} tCO2eq
                               </p>
                             </div>
                           </div>
@@ -1281,12 +1281,12 @@ export default function ScopeOnePage() {
                               {chartViewMode === "yearly" ? `Year ${periodData.year}` : periodData.year}
                             </span>
                             <span className={`font-bold text-foreground ${isMonthly ? 'text-base' : 'text-lg'}`}>
-                              {periodData.total.toFixed(2)}
+                              {formatNumber(periodData.total)}
                             </span>
                             <span className="text-xs text-muted-foreground">tCO2eq</span>
                             {expected && (
                               <span className={`text-xs mt-1 ${isAccurate ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                                {isAccurate ? '✓ Verified' : `Δ ${difference.toFixed(2)}`}
+                                {isAccurate ? '✓ Verified' : `Δ ${formatNumber(difference)}`}
                               </span>
                             )}
                             {isMonthly && isQuarterEnd && (
@@ -1334,7 +1334,7 @@ export default function ScopeOnePage() {
                                     </span>
                                   </div>
                                   <div className="flex items-baseline gap-1">
-                                    <span className="text-xl font-bold text-foreground">{quarterTotal.toFixed(2)}</span>
+                                    <span className="text-xl font-bold text-foreground">{formatNumber(quarterTotal)}</span>
                                     <span className="text-xs text-muted-foreground">tCO2eq</span>
                                   </div>
                                 </div>
@@ -1383,12 +1383,12 @@ export default function ScopeOnePage() {
                     </div>
                     <div className="p-3 rounded-lg border bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950/20 dark:to-yellow-950/20 border-amber-200 dark:border-amber-800">
                       <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-1">Energy Consumption</p>
-                      <p className="text-xl font-bold text-amber-800 dark:text-amber-300">{parseFloat(statistics.totalEnergyConsumption).toLocaleString()}</p>
+                      <p className="text-xl font-bold text-amber-800 dark:text-amber-300">{statistics.totalEnergyConsumption}</p>
                       <p className="text-xs text-amber-600 dark:text-amber-500">MJ</p>
                     </div>
                     <div className="p-3 rounded-lg border bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/20 dark:to-violet-950/20 border-purple-200 dark:border-purple-800">
                       <p className="text-xs font-medium text-purple-700 dark:text-purple-400 mb-1">Fuel Consumption</p>
-                      <p className="text-xl font-bold text-purple-800 dark:text-purple-300">{parseFloat(statistics.totalFuelConsumption).toLocaleString()}</p>
+                      <p className="text-xl font-bold text-purple-800 dark:text-purple-300">{statistics.totalFuelConsumption}</p>
                       <p className="text-xs text-purple-600 dark:text-purple-500">Kg</p>
                     </div>
                     <div className="p-3 rounded-lg border bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/20 dark:to-sky-950/20 border-blue-200 dark:border-blue-800">
@@ -1531,7 +1531,7 @@ export default function ScopeOnePage() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right font-mono text-sm">
-                            {parseNumberWithComma(item['ghg_emissions(tCO2eq)']).toFixed(2)}
+                            {formatNumber(parseNumberWithComma(item['ghg_emissions(tCO2eq)']))}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
@@ -2003,7 +2003,7 @@ export default function ScopeOnePage() {
                   <div className="grid grid-cols-1 gap-3">
                     <div className="min-w-0 bg-white/80 dark:bg-gray-900/80 rounded-lg border border-blue-200 dark:border-blue-800 p-4 text-center break-words">
                       <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Total Fuel Usage</p>
-                      <p className="text-xl font-bold text-blue-900 dark:text-blue-100 overflow-hidden truncate">{calculatedPreview.fuel_usage.toFixed(2)}</p>
+                      <p className="text-xl font-bold text-blue-900 dark:text-blue-100 overflow-hidden truncate">{formatNumber(calculatedPreview.fuel_usage)}</p>
                       <p className="text-xs text-blue-500 dark:text-blue-400">{formData.unit}</p>
                     </div>
                     <div className="min-w-0 bg-white/80 dark:bg-gray-900/80 rounded-lg border border-purple-200 dark:border-purple-800 p-4 text-center break-words">
@@ -2018,7 +2018,7 @@ export default function ScopeOnePage() {
                     </div>
                     <div className="min-w-0 bg-white/80 dark:bg-gray-900/80 rounded-lg border-2 border-green-400 dark:border-green-600 p-4 text-center ring-1 ring-green-200 dark:ring-green-800 break-words">
                       <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">GHG Emissions</p>
-                      <p className="text-xl font-bold text-green-700 dark:text-green-400 overflow-hidden truncate">{calculatedPreview.ghg_emissions.toFixed(2)}</p>
+                      <p className="text-xl font-bold text-green-700 dark:text-green-400 overflow-hidden truncate">{formatNumber(calculatedPreview.ghg_emissions)}</p>
                       <p className="text-xs text-green-500 dark:text-green-400">tCO2eq</p>
                     </div>
                   </div>
@@ -2186,7 +2186,7 @@ export default function ScopeOnePage() {
                       <div key={month.key} className="p-2 bg-background rounded border text-center">
                         <p className="text-xs text-muted-foreground mb-1">{month.label}</p>
                         <p className="text-sm font-mono font-medium">
-                          {parseNumberWithComma(viewingRecord[month.key as keyof GHGScopeOneData] as string).toFixed(2)}
+                          {formatNumber(parseNumberWithComma(viewingRecord[month.key as keyof GHGScopeOneData] as string))}
                         </p>
                       </div>
                     ))}
@@ -2202,7 +2202,7 @@ export default function ScopeOnePage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
                       <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
-                      <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord.fuel_usage).toFixed(2)}</p>
+                      <p className="text-lg font-bold">{formatNumber(parseNumberWithComma(viewingRecord.fuel_usage))}</p>
                       <p className="text-xs text-muted-foreground">{viewingRecord.unit}</p>
                     </div>
                     <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
@@ -2217,7 +2217,7 @@ export default function ScopeOnePage() {
                     </div>
                     <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
                       <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
-                      <p className="text-lg font-bold text-green-700 dark:text-green-400">{parseNumberWithComma(viewingRecord['ghg_emissions(tCO2eq)']).toFixed(2)}</p>
+                      <p className="text-lg font-bold text-green-700 dark:text-green-400">{formatNumber(parseNumberWithComma(viewingRecord['ghg_emissions(tCO2eq)']))}</p>
                       <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
                     </div>
                   </div>
@@ -2583,7 +2583,7 @@ export default function ScopeOnePage() {
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div className="min-w-0 bg-white/80 dark:bg-gray-900/80 rounded-lg border border-blue-200 dark:border-blue-800 p-4 text-center">
                       <p className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">Total Fuel Usage</p>
-                      <p className="text-xl font-bold text-blue-900 dark:text-blue-100">{editCalculatedPreview.fuel_usage.toFixed(2)}</p>
+                      <p className="text-xl font-bold text-blue-900 dark:text-blue-100">{formatNumber(editCalculatedPreview.fuel_usage)}</p>
                       <p className="text-xs text-blue-500 dark:text-blue-400">{editFormData.unit}</p>
                     </div>
                     <div className="min-w-0 bg-white/80 dark:bg-gray-900/80 rounded-lg border border-purple-200 dark:border-purple-800 p-4 text-center">
@@ -2598,7 +2598,7 @@ export default function ScopeOnePage() {
                     </div>
                     <div className="min-w-0 bg-white/80 dark:bg-gray-900/80 rounded-lg border-2 border-green-400 dark:border-green-600 p-4 text-center ring-1 ring-green-200 dark:ring-green-800">
                       <p className="text-xs font-medium text-green-600 dark:text-green-400 mb-1">GHG Emissions</p>
-                      <p className="text-xl font-bold text-green-700 dark:text-green-400">{editCalculatedPreview.ghg_emissions.toFixed(2)}</p>
+                      <p className="text-xl font-bold text-green-700 dark:text-green-400">{formatNumber(editCalculatedPreview.ghg_emissions)}</p>
                       <p className="text-xs text-green-500 dark:text-green-400">tCO2eq</p>
                     </div>
                   </div>

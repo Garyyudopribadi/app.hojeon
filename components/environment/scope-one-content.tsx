@@ -640,9 +640,9 @@ export default function ScopeOneContent() {
     }, 0)
 
     return {
-      totalEmissions: totalEmissions.toFixed(2),
-      totalEnergyConsumption: totalEnergyConsumption.toFixed(2),
-      totalFuelConsumption: totalFuelConsumption.toFixed(2),
+      totalEmissions: totalEmissions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      totalEnergyConsumption: totalEnergyConsumption.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      totalFuelConsumption: totalFuelConsumption.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       totalRecords: filteredData.length
     }
   }, [data, filterYear, filterEntity, filterFacility])
@@ -1214,7 +1214,7 @@ export default function ScopeOneContent() {
                             {fuelType}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {totalEmissions.toFixed(2)} tCO2eq
+                            {totalEmissions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tCO2eq
                           </p>
                         </div>
                       </div>
@@ -1338,7 +1338,7 @@ export default function ScopeOneContent() {
                           <span className="text-xs text-muted-foreground">tCO2eq</span>
                           {expected && (
                             <span className={`text-xs mt-1 ${isAccurate ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
-                              {isAccurate ? '✓ Verified' : `Δ ${difference.toFixed(2)}`}
+                              {isAccurate ? '✓ Verified' : `Δ ${difference.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                             </span>
                           )}
                         </div>
@@ -1422,7 +1422,7 @@ export default function ScopeOneContent() {
                                   </span>
                                 </div>
                                 <div className="flex items-baseline gap-1">
-                                  <span className="text-xl font-bold text-foreground">{quarterTotal.toFixed(2)}</span>
+                                  <span className="text-xl font-bold text-foreground">{quarterTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                   <span className="text-xs text-muted-foreground">tCO2eq</span>
                                 </div>
                               </div>
@@ -2095,7 +2095,7 @@ export default function ScopeOneContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
                     <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
-                    <p className="text-lg font-bold">{calculatedPreview.fuel_usage.toFixed(2)}</p>
+                    <p className="text-lg font-bold">{calculatedPreview.fuel_usage.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     <p className="text-xs text-muted-foreground">{formData.unit}</p>
                   </div>
                   <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
@@ -2110,7 +2110,7 @@ export default function ScopeOneContent() {
                   </div>
                   <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
                     <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
-                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{calculatedPreview.ghg_emissions.toFixed(2)}</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{calculatedPreview.ghg_emissions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
                   </div>
                 </div>
@@ -2282,9 +2282,9 @@ export default function ScopeOneContent() {
                   ].map(month => (
                     <div key={month.key} className="p-2 bg-background rounded border text-center">
                       <p className="text-xs text-muted-foreground mb-1">{month.label}</p>
-                      <p className="text-sm font-mono font-medium">
-                        {parseNumberWithComma(viewingRecord[month.key as keyof GHGScopeOneData] as string).toFixed(2)}
-                      </p>
+                        <p className="text-sm font-mono font-medium">
+                          {parseNumberWithComma(viewingRecord[month.key as keyof GHGScopeOneData] as string).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
                     </div>
                   ))}
                 </div>
@@ -2299,7 +2299,7 @@ export default function ScopeOneContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
                     <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
-                    <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord.fuel_usage).toFixed(2)}</p>
+                    <p className="text-lg font-bold">{parseNumberWithComma(viewingRecord.fuel_usage).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     <p className="text-xs text-muted-foreground">{viewingRecord.unit}</p>
                   </div>
                   <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
@@ -2314,7 +2314,7 @@ export default function ScopeOneContent() {
                   </div>
                   <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
                     <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
-                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{parseNumberWithComma(viewingRecord['ghg_emissions(tCO2eq)']).toFixed(2)}</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{parseNumberWithComma(viewingRecord['ghg_emissions(tCO2eq)']).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
                   </div>
                 </div>
@@ -2696,7 +2696,7 @@ export default function ScopeOneContent() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
                     <p className="text-xs text-muted-foreground mb-1">Fuel Usage</p>
-                    <p className="text-lg font-bold">{editCalculatedPreview.fuel_usage.toFixed(2)}</p>
+                    <p className="text-lg font-bold">{editCalculatedPreview.fuel_usage.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     <p className="text-xs text-muted-foreground">{editFormData.unit}</p>
                   </div>
                   <div className="p-3 bg-white/80 dark:bg-gray-900/80 rounded-lg border text-center">
@@ -2711,7 +2711,7 @@ export default function ScopeOneContent() {
                   </div>
                   <div className="p-3 bg-green-100 dark:bg-green-900/40 rounded-lg border-2 border-green-400 dark:border-green-600 text-center">
                     <p className="text-xs text-green-700 dark:text-green-300 mb-1">GHG Emissions</p>
-                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{editCalculatedPreview.ghg_emissions.toFixed(2)}</p>
+                    <p className="text-lg font-bold text-green-700 dark:text-green-400">{editCalculatedPreview.ghg_emissions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                     <p className="text-xs text-green-600 dark:text-green-400">tCO2eq</p>
                   </div>
                 </div>
