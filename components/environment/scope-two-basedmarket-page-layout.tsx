@@ -1,5 +1,3 @@
-'use client'
-
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -15,15 +13,15 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { EnvironmentSidebar } from "@/components/environment/environment-sidebar"
-import ScopeTwoMarketContent from "@/components/environment/scope-two-market-content"
+import ScopeTwoBasedmarketContent from "./scope-two-basedmarket-content"
 import Image from "next/image"
 
-export default function ScopeTwoMarketPageLayout() {
+export default function ScopeTwoBasedmarketPage() {
   return (
-    <SidebarProvider>
+    <SidebarProvider variant="floating">
       <EnvironmentSidebar />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center justify-between px-4 sticky top-0 bg-background z-10 border-b">
+      <SidebarInset className="flex flex-col">
+        <header className="flex h-16 shrink-0 items-center justify-between px-4 sticky top-0 bg-background z-50 border-b">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="-ml-1" />
             <Separator
@@ -51,7 +49,7 @@ export default function ScopeTwoMarketPageLayout() {
                 </BreadcrumbItem>
                 <BreadcrumbSeparator className="hidden md:block" />
                 <BreadcrumbItem>
-                  <BreadcrumbPage>Scope Two - Market</BreadcrumbPage>
+                  <BreadcrumbPage>Scope Two - Market-Based</BreadcrumbPage>
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
@@ -60,7 +58,9 @@ export default function ScopeTwoMarketPageLayout() {
             <Image src="/logo.png" alt="Logo" width={100} height={100} />
           </div>
         </header>
-        <ScopeTwoMarketContent />
+        <div className="flex-1 overflow-auto px-4 w-full">
+          <ScopeTwoBasedmarketContent />
+        </div>
       </SidebarInset>
     </SidebarProvider>
   )

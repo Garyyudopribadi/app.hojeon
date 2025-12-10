@@ -45,7 +45,7 @@ const data = {
       title: "GHG (Energy Consumption)",
       url: "/compliance/environment/ghg/",
       icon: Leaf,
-      items: [
+        items: [
         {
           title: "Scope 1",
           url: "/compliance/environment/ghg/scope-one",
@@ -55,13 +55,13 @@ const data = {
           url: "/compliance/environment/ghg/scope-two-location",
         },
         {
-          title: "Scope 2 - Market",
-          url: "/compliance/environment/ghg/scope-two-market",
+          title: "Scope 2 - Market-Based",
+          url: "/compliance/environment/ghg/scope-two-basedmarket",
         },
         {
           title: "Scope 3",
           url: "/compliance/environment/ghg/scope-three",
-        },
+        }
       ],
     },
     {

@@ -81,6 +81,25 @@ const CLASSIFICATION_COLORS: Record<string, string> = {
   'Steam': '#f59e0b',
 }
 
+// Parse numbers entered in local formats (e.g. "152,6216" or "1.234,56")
+function parseLocaleNumber(v: any): number {
+  if (v == null || v === '') return 0
+  if (typeof v === 'number') return v
+  let s = String(v).trim()
+  if (s === '') return 0
+  s = s.replace(/\s+/g, '')
+  const hasDot = s.indexOf('.') !== -1
+  const hasComma = s.indexOf(',') !== -1
+  if (hasComma && hasDot) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else if (hasComma) {
+    s = s.replace(',', '.')
+  }
+  s = s.replace(/[^0-9.-]/g, '')
+  const n = parseFloat(s)
+  return isNaN(n) ? 0 : n
+}
+
 const ENTITY_COLORS: Record<string, string> = {
   'HOJEON LIMITED': '#3b82f6',           // Blue
   // Ensure these entities have distinct, high-contrast colors
@@ -516,18 +535,18 @@ export default function ScopeTwoLocationContent() {
       facility: formData.facility || '',
       country: formData.country || '',
       classification: formData.classification || 'Electricity',
-      january: Number(formData.january) || 0,
-      february: Number(formData.february) || 0,
-      march: Number(formData.march) || 0,
-      april: Number(formData.april) || 0,
-      may: Number(formData.may) || 0,
-      june: Number(formData.june) || 0,
-      july: Number(formData.july) || 0,
-      august: Number(formData.august) || 0,
-      september: Number(formData.september) || 0,
-      october: Number(formData.october) || 0,
-      november: Number(formData.november) || 0,
-      december: Number(formData.december) || 0,
+      january: parseLocaleNumber(formData.january) || 0,
+      february: parseLocaleNumber(formData.february) || 0,
+      march: parseLocaleNumber(formData.march) || 0,
+      april: parseLocaleNumber(formData.april) || 0,
+      may: parseLocaleNumber(formData.may) || 0,
+      june: parseLocaleNumber(formData.june) || 0,
+      july: parseLocaleNumber(formData.july) || 0,
+      august: parseLocaleNumber(formData.august) || 0,
+      september: parseLocaleNumber(formData.september) || 0,
+      october: parseLocaleNumber(formData.october) || 0,
+      november: parseLocaleNumber(formData.november) || 0,
+      december: parseLocaleNumber(formData.december) || 0,
       unit: formData.unit || 'MWh',
       currency_unit: formData.currency || '',
       supplier_name: formData.supplier || '',
@@ -570,18 +589,18 @@ export default function ScopeTwoLocationContent() {
       facility: formData.facility || editingRecord.facility,
       country: formData.country || editingRecord.country,
       classification: formData.classification || editingRecord.classification,
-      january: Number(formData.january) || editingRecord.january,
-      february: Number(formData.february) || editingRecord.february,
-      march: Number(formData.march) || editingRecord.march,
-      april: Number(formData.april) || editingRecord.april,
-      may: Number(formData.may) || editingRecord.may,
-      june: Number(formData.june) || editingRecord.june,
-      july: Number(formData.july) || editingRecord.july,
-      august: Number(formData.august) || editingRecord.august,
-      september: Number(formData.september) || editingRecord.september,
-      october: Number(formData.october) || editingRecord.october,
-      november: Number(formData.november) || editingRecord.november,
-      december: Number(formData.december) || editingRecord.december,
+      january: parseLocaleNumber(formData.january) || editingRecord.january,
+      february: parseLocaleNumber(formData.february) || editingRecord.february,
+      march: parseLocaleNumber(formData.march) || editingRecord.march,
+      april: parseLocaleNumber(formData.april) || editingRecord.april,
+      may: parseLocaleNumber(formData.may) || editingRecord.may,
+      june: parseLocaleNumber(formData.june) || editingRecord.june,
+      july: parseLocaleNumber(formData.july) || editingRecord.july,
+      august: parseLocaleNumber(formData.august) || editingRecord.august,
+      september: parseLocaleNumber(formData.september) || editingRecord.september,
+      october: parseLocaleNumber(formData.october) || editingRecord.october,
+      november: parseLocaleNumber(formData.november) || editingRecord.november,
+      december: parseLocaleNumber(formData.december) || editingRecord.december,
       unit: formData.unit || editingRecord.unit,
       currency_unit: formData.currency || editingRecord.currency,
       supplier_name: formData.supplier || editingRecord.supplier,

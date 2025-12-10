@@ -1,19 +1,17 @@
-'use client'
+ 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '../../../../../lib/useAuth'
-import ScopeTwoMarketPage from "@/components/environment/scope-two-market-page"
+import ScopeTwoBasedmarketPage from "@/components/environment/scope-two-basedmarket-page"
 import Loading from "@/components/ui/loading"
 
 export default function Page() {
   const { loading, profile } = useAuth()
   const router = useRouter()
-  const hasCheckedRef = useRef(false)
 
   useEffect(() => {
-    if (!loading && profile && !hasCheckedRef.current) {
-      hasCheckedRef.current = true
+    if (!loading) {
       const dept = profile?.department ? String(profile.department).toLowerCase() : null
       if (dept && dept !== 'compliance') {
         const safeDept = dept.replace(/[^a-z0-9-_/]/gi, '').replace(/^\/+|\/+$/g, '')
@@ -22,7 +20,5 @@ export default function Page() {
     }
   }, [loading, profile, router])
 
-  if (loading) return <Loading />
-  
-  return <ScopeTwoMarketPage />
+  return loading ? <Loading /> : <ScopeTwoBasedmarketPage />
 }

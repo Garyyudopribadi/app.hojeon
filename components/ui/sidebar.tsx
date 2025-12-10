@@ -65,6 +65,8 @@ function SidebarProvider({
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  // allow passing visual variant through provider (passes through to wrapper div)
+  variant?: "sidebar" | "floating" | "inset"
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
