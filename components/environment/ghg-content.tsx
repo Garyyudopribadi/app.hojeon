@@ -385,6 +385,9 @@ export default function GHGContent() {
     })
 
     return scopeTwoMarketData.map(item => {
+      // Skip renewable adjustment for records ID 9 and 10
+      if (item.id === '9' || item.id === '10') return item
+
       const facilityKey = (item.facility || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
       const yearKey = String(item.year ?? '').trim()
       const key = `${facilityKey}::${yearKey}`
@@ -416,9 +419,9 @@ export default function GHGContent() {
 
   // Calculate Scope 2 Market totals (with renewable energy adjustments)
   const scopeTwoMarketTotals = useMemo(() => {
-    const totalEmissions = adjustedMarketData.reduce((sum, item) => sum + (item.tCO2eq || 0), 0)
+    const totalEmissions = Math.round(adjustedMarketData.reduce((sum, item) => sum + (item.tCO2eq || 0), 0) * 1000) / 1000
     const totalEnergy = adjustedMarketData.reduce((sum, item) => sum + (item.total_mj || 0), 0)
-    const totalPurchase = adjustedMarketData.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+    const totalPurchase = Math.round(adjustedMarketData.reduce((sum, item) => sum + parseLocaleNumber(item.total_amount), 0) * 1000) / 1000
     const totalRecords = adjustedMarketData.length
 
     // Calculate total renewable energy used for adjustments

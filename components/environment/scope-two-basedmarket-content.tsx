@@ -552,8 +552,8 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
   const calculatedTotalEnergyUsage = useMemo(() => {
     const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const
     const sum = months.reduce((sum, month) => sum + (parseLocaleNumber(renewableFormData[month as keyof typeof renewableFormData]) || 0), 0)
-    // Convert to MWh equivalent for storage
-    return renewableFormData.unit === 'Unit' ? sum / 1000 : sum
+    // Keep as actual total from monthly entries
+    return sum
   }, [renewableFormData.january, renewableFormData.february, renewableFormData.march, renewableFormData.april, renewableFormData.may, renewableFormData.june, renewableFormData.july, renewableFormData.august, renewableFormData.september, renewableFormData.october, renewableFormData.november, renewableFormData.december, renewableFormData.unit])
 
   // Display total in the entered unit
@@ -682,7 +682,11 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       tCO2eq = (kgCO2 * 1 + kgCH4 * 27 + kgN2O * 273) / 1000
     }
 
-    return { total_amount: total, total_mj: mj, kgCO2, kgCH4, kgN2O, tCO2eq }
+    // Round to 3 decimal places to avoid floating point precision issues
+    tCO2eq = Math.round(tCO2eq * 1000) / 1000
+    const roundedTotal = Math.round(total * 1000) / 1000
+
+    return { total_amount: roundedTotal, total_mj: mj, kgCO2, kgCH4, kgN2O, tCO2eq }
   }
 
   // Adjust market-based data in-memory by subtracting matching renewable monthly values
@@ -713,7 +717,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       const yearKey = String(item.year ?? '').trim()
       const key = `${facilityKey}::${yearKey}`
       const renewable = renewableMap.get(key)
-      if (!renewable) return item
+      if (!renewable || item.id === '9' || item.id === '10') return item
 
       const months = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
       const adjusted: GHGScopeTwoMarketData = { ...item }
@@ -745,9 +749,9 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
     if (filterCountry !== 'all') filtered = filtered.filter(item => item.country === filterCountry)
 
     return {
-      totalEmissions: filtered.reduce((sum: number, item: GHGScopeTwoMarketData) => sum + item.tCO2eq, 0),
+      totalEmissions: Math.round(filtered.reduce((sum: number, item: GHGScopeTwoMarketData) => sum + item.tCO2eq, 0) * 1000) / 1000,
       totalEnergyMJ: filtered.reduce((sum: number, item: GHGScopeTwoMarketData) => sum + item.total_mj, 0),
-      totalPurchase: filtered.reduce((sum: number, item: GHGScopeTwoMarketData) => sum + parseLocaleNumber(item.total_amount), 0),
+      totalPurchase: Math.round(filtered.reduce((sum: number, item: GHGScopeTwoMarketData) => sum + parseLocaleNumber(item.total_amount), 0) * 1000) / 1000,
       totalRecords: filtered.length
     }
   }, [adjustedMarketData, filterYear, filterEntity, filterCountry])
@@ -1036,9 +1040,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
 
     const payload: any = {
       created_at: new Date().toISOString(),
-      entity: renewableFormData.entity || '',
       facility: renewableFormData.facility || '',
-      country: renewableFormData.country || '',
       classification: renewableFormData.classification || '',
       total_energy_used: totalEnergyUsage,
       january: parseLocaleNumber(renewableFormData.january) || 0,
@@ -1062,10 +1064,10 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       contract_duration: renewableFormData.contract_duration || '',
       // Send date_collection as a year string
       date_collection: renewableFormData.date_collection || new Date().getFullYear().toString(),
-      year: Number(renewableFormData.date_collection || renewableFormData.year || new Date().getFullYear()),
       certificate_availability: Boolean(renewableFormData.certificate_availability),
       contract_information: renewableFormData.contract_information || '',
-      updated_by: updaterName
+      updated_by: updaterName,
+      updated_date: null
     }
 
     console.log('Attempting Supabase insert with payload:', payload)
