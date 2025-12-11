@@ -55,7 +55,7 @@ const data = {
           url: "/compliance/environment/ghg/scope-two-location",
         },
         {
-          title: "Scope 2 - Market-Based",
+          title: "Scope 2 - Market",
           url: "/compliance/environment/ghg/scope-two-basedmarket",
         },
         {

@@ -97,6 +97,7 @@ interface GHGScopeTwoRenewableEnergy {
   contract_information: string
   updated_by: string
   updated_date: string | null
+  updated_at: string
 }
 
 const CLASSIFICATION_COLORS: Record<string, string> = {
@@ -331,9 +332,9 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       year: Number(r.date_collection) || Number(r.year) || new Date().getFullYear(),
       total_amount: parseLocaleNumber(r.total_purchase_amount) || parseLocaleNumber(r.total_amount) || 0,
       total_mj: parseLocaleNumber(r.total_purchase_mj) || parseLocaleNumber(r.total_mj) || 0,
-      kgCO2: Number(r.kgco2 ?? r.kgCO2) || 0,
-      kgCH4: Number(r.kgch4 ?? r.kgCH4) || 0,
-      kgN2O: Number(r.kgn2o ?? r.kgN2O) || 0,
+      kgCO2: Number(r.co2 ?? r.kg_co2 ?? r.kgco2 ?? r.kgCO2) || 0,
+      kgCH4: Number(r.ch4 ?? r.kg_ch4 ?? r.kgch4 ?? r.kgCH4) || 0,
+      kgN2O: Number(r.n2o ?? r.kg_n2o ?? r.kgn2o ?? r.kgN2O) || 0,
       tCO2eq: Number(r.tco2eq ?? r.tCO2eq) || 0
       ,
       updated_by: r.updated_by ?? r.updatedBy ?? null,
@@ -440,7 +441,8 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       certificate_availability: Boolean(r.certificate_availability ?? r.certificate_availability),
       contract_information: r.contract_information || '',
       updated_by: r.updated_by ?? r.updatedBy ?? null,
-      updated_date: r.updated_date ?? r.updatedDate ?? null
+      updated_date: r.updated_date ?? r.updatedDate ?? null,
+      updated_at: r.updated_at || new Date().toISOString()
     }))
 
     // If some rows have updated_by that looks like an email, resolve to profiles.nickname
@@ -550,9 +552,15 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
   const calculatedTotalEnergyUsage = useMemo(() => {
     const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const
     const sum = months.reduce((sum, month) => sum + (parseLocaleNumber(renewableFormData[month as keyof typeof renewableFormData]) || 0), 0)
-    // If unit is "Unit", multiply by 1000
-    return renewableFormData.unit === 'Unit' ? sum * 1000 : sum
+    // Convert to MWh equivalent for storage
+    return renewableFormData.unit === 'Unit' ? sum / 1000 : sum
   }, [renewableFormData.january, renewableFormData.february, renewableFormData.march, renewableFormData.april, renewableFormData.may, renewableFormData.june, renewableFormData.july, renewableFormData.august, renewableFormData.september, renewableFormData.october, renewableFormData.november, renewableFormData.december, renewableFormData.unit])
+
+  // Display total in the entered unit
+  const displayTotalEnergyUsage = useMemo(() => {
+    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const
+    return months.reduce((sum, month) => sum + (parseLocaleNumber(renewableFormData[month as keyof typeof renewableFormData]) || 0), 0)
+  }, [renewableFormData.january, renewableFormData.february, renewableFormData.march, renewableFormData.april, renewableFormData.may, renewableFormData.june, renewableFormData.july, renewableFormData.august, renewableFormData.september, renewableFormData.october, renewableFormData.november, renewableFormData.december])
 
   // Auto-set currency based on country
   useEffect(() => {
@@ -589,13 +597,13 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
   }
 
   const years = useMemo(() => {
-    const yearSet = new Set([
+    const yearSet = new Set<string>([
       ...data.map(item => item.year.toString()),
       ...renewableEnergyData.map(item => item.date_collection)
     ])
-    // Always include the current year for new records
-    const currentYear = new Date().getFullYear().toString()
-    yearSet.add(currentYear)
+    // Always include current year for new records
+    const currentYear = new Date().getFullYear()
+    yearSet.add(currentYear.toString())
     const sortedYears = Array.from(yearSet).sort()
     // Set default monthly year to latest year if not set
     if (sortedYears.length > 0 && !selectedMonthlyYear) {
@@ -626,7 +634,11 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
 
   const calculateFromForm = (f: Partial<GHGScopeTwoMarketData>) => {
     const months = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
-    const total = months.reduce((s, m) => s + (Number((f as any)[m]) || 0), 0)
+    const total = months.reduce((s, m) => {
+      const val = parseLocaleNumber((f as any)[m])
+      const num = isNaN(val) ? 0 : val
+      return s + num
+    }, 0)
     
     // Step 1: Convert MWh to MJ (1 MWh = 3,600 MJ)
     const mj = total * 3600
@@ -681,18 +693,25 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
     // Build lookup: `${facility}::${year}` -> aggregated renewable monthly values
     const renewableMap = new Map<string, Record<string, number>>()
     renewableEnergyData.forEach(r => {
-      const key = `${(r.facility || '').trim()}::${String(r.date_collection || r.year || '')}`
+      const facilityKey = (r.facility || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+      const yearKey = String(r.date_collection ?? r.year ?? '').trim()
+      const key = `${facilityKey}::${yearKey}`
       const months = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
       const existing = renewableMap.get(key) || {}
       const agg: Record<string, number> = { ...existing }
       months.forEach(m => {
-        agg[m] = (agg[m] || 0) + (parseLocaleNumber((r as any)[m]) || 0)
+        const monthlyValue = parseLocaleNumber((r as any)[m]) || 0
+        // Convert to MWh if unit is kWh
+        const convertedValue = r.unit === 'kWh' ? monthlyValue / 1000 : monthlyValue
+        agg[m] = (agg[m] || 0) + convertedValue
       })
       renewableMap.set(key, agg)
     })
 
     return data.map(item => {
-      const key = `${(item.facility || '').trim()}::${String(item.year || '')}`
+      const facilityKey = (item.facility || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+      const yearKey = String(item.year ?? '').trim()
+      const key = `${facilityKey}::${yearKey}`
       const renewable = renewableMap.get(key)
       if (!renewable) return item
 
@@ -891,6 +910,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
   }
 
   const handleAdd = async () => {
+    console.log('handleAdd called with formData:', formData)
     const calc = calculateFromForm(formData)
     // resolve updater name from profiles.nickname (fallbacks handled inside)
     const updaterName = await getUpdaterName()
@@ -918,13 +938,15 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       date_collection: String(formData.year || new Date().getFullYear()),
       total_purchase_amount: calc.total_amount,
       total_purchase_mj: calc.total_mj,
-      kgco2: calc.kgCO2,
-      kgch4: calc.kgCH4,
-      kgn2o: calc.kgN2O,
-      tco2eq: calc.tCO2eq,
+      kgCO2: calc.kgCO2,
+      kgCH4: calc.kgCH4,
+      kgN2O: calc.kgN2O,
+      tCO2eq: calc.tCO2eq,
       updated_by: updaterName,
       updated_date: new Date().toISOString()
     }
+
+    console.log('Inserting payload:', payload)
 
     const { data: inserted, error } = await supabase
       .from('ghg_scopetwo_location')
@@ -932,8 +954,10 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       .select()
       .single()
 
+    console.log('Insert result - data:', inserted, 'error:', error)
+
     if (error) {
-      toast({ title: 'Insert error', description: error.message })
+      toast({ title: 'Insert error', description: error.message || 'Unknown error' })
       return
     }
 
@@ -972,10 +996,10 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       date_collection: String(formData.year || editingRecord.year),
       total_purchase_amount: calc.total_amount,
       total_purchase_mj: calc.total_mj,
-      kgco2: calc.kgCO2,
-      kgch4: calc.kgCH4,
-      kgn2o: calc.kgN2O,
-      tco2eq: calc.tCO2eq,
+      kgCO2: calc.kgCO2,
+      kgCH4: calc.kgCH4,
+      kgN2O: calc.kgN2O,
+      tCO2eq: calc.tCO2eq,
       updated_by: updaterNameEdit,
       updated_date: new Date().toISOString()
     }
@@ -983,7 +1007,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
     const { data: updated, error } = await supabase
       .from('ghg_scopetwo_location')
       .update(payload)
-      .eq('id', editingRecord.id)
+      .eq('id', Number(editingRecord.id))
       .select()
       .single()
 
@@ -1012,7 +1036,9 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
 
     const payload: any = {
       created_at: new Date().toISOString(),
+      entity: renewableFormData.entity || '',
       facility: renewableFormData.facility || '',
+      country: renewableFormData.country || '',
       classification: renewableFormData.classification || '',
       total_energy_used: totalEnergyUsage,
       january: parseLocaleNumber(renewableFormData.january) || 0,
@@ -1036,10 +1062,10 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
       contract_duration: renewableFormData.contract_duration || '',
       // Send date_collection as a year string
       date_collection: renewableFormData.date_collection || new Date().getFullYear().toString(),
+      year: Number(renewableFormData.date_collection || renewableFormData.year || new Date().getFullYear()),
       certificate_availability: Boolean(renewableFormData.certificate_availability),
       contract_information: renewableFormData.contract_information || '',
-      updated_by: updaterName,
-      updated_date: new Date().toISOString()
+      updated_by: updaterName
     }
 
     console.log('Attempting Supabase insert with payload:', payload)
@@ -1098,7 +1124,11 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
   }
 
   const handleRenewableEditSave = async () => {
-    if (!editingRenewableRecord) return
+    console.log('handleRenewableEditSave called', { editingRenewableRecord, renewableFormData })
+    if (!editingRenewableRecord) {
+      console.log('No editingRenewableRecord')
+      return
+    }
     
     // Calculate total energy usage from monthly values
     const months = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
@@ -1110,48 +1140,58 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
     const updaterNameEdit = await getUpdaterName()
 
     const payload: any = {
-      facility: renewableFormData.facility || editingRenewableRecord.facility,
-      year: renewableFormData.year || editingRenewableRecord.year,
-      classification: renewableFormData.classification || editingRenewableRecord.classification,
+      facility: renewableFormData.facility,
+      classification: renewableFormData.classification,
       total_energy_used: totalEnergyUsage,
-      january: parseLocaleNumber(renewableFormData.january) || editingRenewableRecord.january,
-      february: parseLocaleNumber(renewableFormData.february) || editingRenewableRecord.february,
-      march: parseLocaleNumber(renewableFormData.march) || editingRenewableRecord.march,
-      april: parseLocaleNumber(renewableFormData.april) || editingRenewableRecord.april,
-      may: parseLocaleNumber(renewableFormData.may) || editingRenewableRecord.may,
-      june: parseLocaleNumber(renewableFormData.june) || editingRenewableRecord.june,
-      july: parseLocaleNumber(renewableFormData.july) || editingRenewableRecord.july,
-      august: parseLocaleNumber(renewableFormData.august) || editingRenewableRecord.august,
-      september: parseLocaleNumber(renewableFormData.september) || editingRenewableRecord.september,
-      october: parseLocaleNumber(renewableFormData.october) || editingRenewableRecord.october,
-      november: parseLocaleNumber(renewableFormData.november) || editingRenewableRecord.november,
-      december: parseLocaleNumber(renewableFormData.december) || editingRenewableRecord.december,
-      unit: renewableFormData.unit || editingRenewableRecord.unit,
-      total_purchase: parseLocaleNumber(renewableFormData.total_purchase) || editingRenewableRecord.total_purchase,
-      currency: renewableFormData.currency || editingRenewableRecord.currency,
-      supplier_name: renewableFormData.supplier_name || editingRenewableRecord.supplier_name,
-      distinction: renewableFormData.distinction || editingRenewableRecord.distinction,
-      energy_source: renewableFormData.energy_source || editingRenewableRecord.energy_source,
-      contract_duration: renewableFormData.contract_duration || editingRenewableRecord.contract_duration,
-      date_collection: renewableFormData.date_collection || editingRenewableRecord.date_collection,
+      january: parseLocaleNumber(renewableFormData.january),
+      february: parseLocaleNumber(renewableFormData.february),
+      march: parseLocaleNumber(renewableFormData.march),
+      april: parseLocaleNumber(renewableFormData.april),
+      may: parseLocaleNumber(renewableFormData.may),
+      june: parseLocaleNumber(renewableFormData.june),
+      july: parseLocaleNumber(renewableFormData.july),
+      august: parseLocaleNumber(renewableFormData.august),
+      september: parseLocaleNumber(renewableFormData.september),
+      october: parseLocaleNumber(renewableFormData.october),
+      november: parseLocaleNumber(renewableFormData.november),
+      december: parseLocaleNumber(renewableFormData.december),
+      unit: renewableFormData.unit,
+      total_purchase: parseLocaleNumber(renewableFormData.total_purchase),
+      currency: renewableFormData.currency,
+      supplier_name: renewableFormData.supplier_name,
+      distinction: renewableFormData.distinction,
+      energy_source: renewableFormData.energy_source,
+      contract_duration: renewableFormData.contract_duration,
+      date_collection: renewableFormData.date_collection,
       certificate_availability: Boolean(renewableFormData.certificate_availability),
-      contract_information: renewableFormData.contract_information || editingRenewableRecord.contract_information,
-      updated_by: updaterNameEdit,
-      updated_date: new Date().toISOString()
+      contract_information: renewableFormData.contract_information,
+      updated_by: updaterNameEdit
     }
 
-    const { data: updated, error } = await supabase
+    console.log('Update payload:', payload)
+    console.log('Updating id:', Number(editingRenewableRecord.id))
+
+    const { data, error } = await supabase
       .from('ghg_scopetwo_renewableenergy')
       .update(payload)
-      .eq('id', editingRenewableRecord.id)
+      .eq('id', Number(editingRenewableRecord.id))
       .select()
-      .single()
 
-    if (error) {
-      toast({ title: 'Update error', description: error.message })
+    console.log('Supabase update result:', { data, error })
+
+    if (error && error.message && error.message.trim()) {
+      console.log('Update error:', error)
+      toast({ title: 'Update error', description: error.message || 'Update failed' })
       return
     }
 
+    if (!data || data.length === 0) {
+      console.log('Update failed: no data returned')
+      toast({ title: 'Update error', description: 'Update failed: no data returned' })
+      return
+    }
+
+    console.log('Update successful, reloading data')
     await loadRenewableEnergyData()
     setIsRenewableEditOpen(false)
     setEditingRenewableRecord(null)
@@ -1787,6 +1827,15 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
                   <Label className='text-sm font-medium w-28 flex-shrink-0'>Country *</Label>
                   <Input value={formData.country || ''} readOnly className='h-10 bg-muted/10 flex-1' />
                 </div>
+                <div className='flex items-center gap-3'>
+                  <Label className='text-sm font-medium w-28 flex-shrink-0'>Year *</Label>
+                  <Select value={String(formData.year || new Date().getFullYear())} onValueChange={(v) => setFormData({...formData, year: Number(v)})}>
+                    <SelectTrigger className='h-10 flex-1'><SelectValue placeholder='Select year' /></SelectTrigger>
+                    <SelectContent>
+                      {years.map(year => <SelectItem key={year} value={year}>{year}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
 
@@ -1955,7 +2004,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
                 <X className='mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4' />
                 Cancel
               </Button>
-              <Button onClick={handleAdd} disabled={!formData.entity || !formData.facility} className='w-full sm:w-auto h-10 sm:h-11 text-sm'>
+              <Button onClick={handleAdd} disabled={!formData.entity || !formData.facility || !formData.year} className='w-full sm:w-auto h-10 sm:h-11 text-sm'>
                 <Plus className='mr-2 h-4 w-4' />
                 Add Record
               </Button>
@@ -2460,7 +2509,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
                   <Label className='text-sm font-semibold text-green-800 dark:text-green-200'>Total Used Amount *</Label>
                   <Input 
                     type='text' 
-                    value={formatNumber(calculatedTotalEnergyUsage, calculatedTotalEnergyUsage % 1 === 0 ? 0 : 4)} 
+                    value={formatNumber(displayTotalEnergyUsage, displayTotalEnergyUsage % 1 === 0 ? 0 : 4)} 
                     readOnly 
                     className='h-11 bg-green-50 dark:bg-green-950/50 border-green-200 dark:border-green-800 font-mono font-semibold' 
                     placeholder='Total from 12 months' 
@@ -2516,7 +2565,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
                   <div className='mt-3 pt-3 border-t border-border/50'>
                     <div className='flex items-center justify-between text-sm'>
                       <span className='font-medium text-muted-foreground'>Total:</span>
-                      <span className='font-bold font-mono text-primary'>{formatLocaleDisplay(calculatedTotalEnergyUsage, calculatedTotalEnergyUsage % 1 === 0 ? 0 : 4)} {renewableFormData.unit || 'MWh'}</span>
+                      <span className='font-bold font-mono text-primary'>{formatLocaleDisplay(displayTotalEnergyUsage, displayTotalEnergyUsage % 1 === 0 ? 0 : 4)} {renewableFormData.unit || 'MWh'}</span>
                     </div>
                   </div>
                 </div>
@@ -2752,7 +2801,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
 
                   <div className='space-y-1.5 hidden'>
                   <Label className='text-xs sm:text-sm font-medium'>Total Energy Usage *</Label>
-                  <Input type='text' value={formatNumber(calculatedTotalEnergyUsage)} readOnly className='bg-muted/10' placeholder='Total from 12 months' />
+                  <Input type='text' value={formatNumber(displayTotalEnergyUsage)} readOnly className='bg-muted/10' placeholder='Total from 12 months' />
                 </div>
 
                 <div className='space-y-1.5'>
@@ -2761,7 +2810,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value='MWh'>MWh</SelectItem>
-                      <SelectItem value='kWh'>kWh</SelectItem>
+                      <SelectItem value='Unit'>Unit</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2820,7 +2869,7 @@ const emptyForm: Partial<GHGScopeTwoMarketData> = {
                   <div className='mt-3 pt-3 border-t border-border/50'>
                     <div className='flex items-center justify-between text-sm'>
                       <span className='font-medium text-muted-foreground'>Total:</span>
-                      <span className='font-bold font-mono text-primary'>{formatLocaleDisplay(calculatedTotalEnergyUsage, calculatedTotalEnergyUsage % 1 === 0 ? 0 : 4)} {renewableFormData.unit || 'MWh'}</span>
+                      <span className='font-bold font-mono text-primary'>{formatLocaleDisplay(displayTotalEnergyUsage, displayTotalEnergyUsage % 1 === 0 ? 0 : 4)} {renewableFormData.unit || 'MWh'}</span>
                     </div>
                   </div>
                 </div>

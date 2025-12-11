@@ -210,9 +210,9 @@ export default function ScopeTwoLocationContent() {
       year: Number(r.date_collection) || Number(r.year) || new Date().getFullYear(),
       total_amount: Number(r.total_purchase_amount) || Number(r.total_amount) || 0,
       total_mj: Number(r.total_purchase_mj) || Number(r.total_mj) || 0,
-      kgCO2: Number(r.kgco2 ?? r.kgCO2) || 0,
-      kgCH4: Number(r.kgch4 ?? r.kgCH4) || 0,
-      kgN2O: Number(r.kgn2o ?? r.kgN2O) || 0,
+      kgCO2: Number(r.co2 ?? r.kg_co2 ?? r.kgco2 ?? r.kgCO2) || 0,
+      kgCH4: Number(r.ch4 ?? r.kg_ch4 ?? r.kgch4 ?? r.kgCH4) || 0,
+      kgN2O: Number(r.n2o ?? r.kg_n2o ?? r.kgn2o ?? r.kgN2O) || 0,
       tCO2eq: Number(r.tco2eq ?? r.tCO2eq) || 0
       ,
       updated_by: r.updated_by ?? r.updatedBy ?? null,
@@ -553,10 +553,10 @@ export default function ScopeTwoLocationContent() {
       date_collection: String(formData.year || new Date().getFullYear()),
       total_purchase_amount: calc.total_amount,
       total_purchase_mj: calc.total_mj,
-      kgco2: calc.kgCO2,
-      kgch4: calc.kgCH4,
-      kgn2o: calc.kgN2O,
-      tco2eq: calc.tCO2eq,
+      kgCO2: calc.kgCO2,
+      kgCH4: calc.kgCH4,
+      kgN2O: calc.kgN2O,
+      tCO2eq: calc.tCO2eq,
       updated_by: updaterName,
       updated_date: new Date().toISOString()
     }
@@ -607,10 +607,10 @@ export default function ScopeTwoLocationContent() {
       date_collection: String(formData.year || editingRecord.year),
       total_purchase_amount: calc.total_amount,
       total_purchase_mj: calc.total_mj,
-      kgco2: calc.kgCO2,
-      kgch4: calc.kgCH4,
-      kgn2o: calc.kgN2O,
-      tco2eq: calc.tCO2eq,
+      kgCO2: calc.kgCO2,
+      kgCH4: calc.kgCH4,
+      kgN2O: calc.kgN2O,
+      tCO2eq: calc.tCO2eq,
       updated_by: updaterNameEdit,
       updated_date: new Date().toISOString()
     }
