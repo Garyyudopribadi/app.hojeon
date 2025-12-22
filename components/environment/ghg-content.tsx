@@ -137,16 +137,16 @@ const countryEmissionFactor = (country: string) => {
 }
 
 const calculateFromForm = (f: Partial<ScopeTwoMarketData>) => {
-  const months = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
+  const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const
   const total = months.reduce((s, m) => {
     const val = parseLocaleNumber((f as any)[m])
     const num = isNaN(val) ? 0 : val
     return s + num
   }, 0)
-  
+
   // Step 1: Convert MWh to MJ (1 MWh = 3,600 MJ)
   const mj = total * 3600
-  
+
   // Step 2: Calculate kgCO2 and other gases
   const country = (f.country || '').toLowerCase()
 
@@ -196,20 +196,25 @@ export default function GHGContent() {
   const [renewableEnergyData, setRenewableEnergyData] = useState<RenewableEnergyData[]>([])
   const [loading, setLoading] = useState(true)
   const [targetYear, setTargetYear] = useState<number>(2030)
-  const [targetEmission, setTargetEmission] = useState<number>(0)
+  const [baselineYear, setBaselineYear] = useState<number>(new Date().getFullYear() - 1)
+  const [targetReduction, setTargetReduction] = useState<number>(0)
   const [isTargetDialogOpen, setIsTargetDialogOpen] = useState(false)
 
   // Load target settings from localStorage
   useEffect(() => {
     const savedYear = localStorage.getItem('ghg_target_year')
-    const savedEmission = localStorage.getItem('ghg_target_emission')
+    const savedBaseline = localStorage.getItem('ghg_baseline_year')
+    const savedReduction = localStorage.getItem('ghg_target_reduction')
+
     if (savedYear) setTargetYear(Number(savedYear))
-    if (savedEmission) setTargetEmission(Number(savedEmission))
+    if (savedBaseline) setBaselineYear(Number(savedBaseline))
+    if (savedReduction) setTargetReduction(Number(savedReduction))
   }, [])
 
   const handleSaveTarget = () => {
     localStorage.setItem('ghg_target_year', String(targetYear))
-    localStorage.setItem('ghg_target_emission', String(targetEmission))
+    localStorage.setItem('ghg_baseline_year', String(baselineYear))
+    localStorage.setItem('ghg_target_reduction', String(targetReduction))
     setIsTargetDialogOpen(false)
   }
 
@@ -372,7 +377,7 @@ export default function GHGContent() {
       const facilityKey = (r.facility || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
       const yearKey = String(r.date_collection ?? r.year ?? '').trim()
       const key = `${facilityKey}::${yearKey}`
-      const months = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
+      const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const
       const existing = renewableMap.get(key) || {}
       const agg: Record<string, number> = { ...existing }
       months.forEach(m => {
@@ -394,7 +399,7 @@ export default function GHGContent() {
       const renewable = renewableMap.get(key)
       if (!renewable) return item
 
-      const months = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
+      const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const
       const adjusted: ScopeTwoMarketData = { ...item }
 
       // Subtract renewable monthly values (cap at 0 to avoid negative energy)
@@ -426,7 +431,7 @@ export default function GHGContent() {
 
     // Calculate total renewable energy used for adjustments
     const renewableEnergyTotal = renewableEnergyData.reduce((sum, item) => {
-      const months = ['january','february','march','april','may','june','july','august','september','october','november','december'] as const
+      const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const
       return sum + months.reduce((monthSum, month) => monthSum + parseLocaleNumber((item as any)[month]), 0)
     }, 0)
 
@@ -470,7 +475,7 @@ export default function GHGContent() {
   // Aggregate data by year for charts
   const combinedLocationByYear = useMemo(() => {
     const map = new Map<number, number>()
-    
+
     // Scope 1
     scopeOneData.forEach(d => {
       const y = getYear(d.date_collection)
@@ -491,7 +496,7 @@ export default function GHGContent() {
 
   const combinedMarketByYear = useMemo(() => {
     const map = new Map<number, number>()
-    
+
     // Scope 1
     scopeOneData.forEach(d => {
       const y = getYear(d.date_collection)
@@ -511,38 +516,69 @@ export default function GHGContent() {
   }, [scopeOneData, adjustedMarketData])
 
   // Generate projection data
-  const getProjectionData = (historical: {year: number, emissions: number}[]) => {
-     if (!historical.length) return []
-     const sorted = [...historical].sort((a,b) => a.year - b.year)
-     const last = sorted[sorted.length - 1]
-     
-     const data = sorted.map(d => ({
-         year: d.year,
-         actual: d.emissions as number | null,
-         projection: null as number | null
-     }))
+  const getProjectionData = (historical: { year: number, emissions: number }[]) => {
+    if (!historical.length) return []
+    const sorted = [...historical].sort((a, b) => a.year - b.year)
+    const lastDataPoint = sorted[sorted.length - 1]
 
-     if (targetYear > last.year) {
-         // Connect the line to the last actual point
-         data[data.length - 1].projection = last.emissions
+    // Find baseline emission
+    const baselineData = sorted.find(d => d.year === baselineYear)
+    // Fallback to last data point if baseline year not found in data
+    const startDataPoint = baselineData || lastDataPoint
+    const startVal = startDataPoint.emissions
+    const startYear = startDataPoint.year
 
-         const startYear = last.year
-         const startVal = last.emissions
-         const yearsDiff = targetYear - startYear
-         const valDiff = targetEmission - startVal
-         const step = valDiff / yearsDiff
+    // Calculate target emission based on percentage reduction from baseline
+    const targetEmissionValue = startVal * (1 - (targetReduction / 100))
 
-         for (let i = 1; i <= yearsDiff; i++) {
-             const y = startYear + i
-             const val = startVal + (step * i)
-             data.push({
-                 year: y,
-                 actual: null,
-                 projection: val
-             })
-         }
-     }
-     return data
+    const data = sorted.map(d => ({
+      year: d.year,
+      actual: d.emissions as number | null,
+      projection: null as number | null,
+      difference: null as number | null
+    }))
+
+    // Ensure start point has projection value so line connects
+    const startEntry = data.find(d => d.year === startYear)
+    if (startEntry) {
+      startEntry.projection = startVal
+    }
+
+    if (targetYear > startYear) {
+      const yearsDiff = targetYear - startYear
+      const valDiff = targetEmissionValue - startVal
+      const step = valDiff / yearsDiff
+
+      for (let i = 1; i <= yearsDiff; i++) {
+        const y = startYear + i
+        const val = startVal + (step * i)
+
+        // Check if year already exists in data (e.g. historical data overlaps with projection)
+        const existingEntryIndex = data.findIndex(d => d.year === y)
+
+        if (existingEntryIndex >= 0) {
+          data[existingEntryIndex].projection = val
+        } else {
+          data.push({
+            year: y,
+            actual: null,
+            projection: val,
+            difference: null
+          })
+        }
+      }
+    }
+
+    // Calculate difference where both exist
+    // difference = actual - projection
+    data.forEach(d => {
+      if (d.actual !== null && d.projection !== null) {
+        d.difference = d.actual - d.projection
+      }
+    })
+
+    // Sort final data again just in case pushed items are out of order
+    return data.sort((a, b) => a.year - b.year)
   }
 
   // Prepare chart data for scope comparison
@@ -588,57 +624,60 @@ export default function GHGContent() {
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between border-b pb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">GHG Emissions Overview</h1>
-          <p className="text-muted-foreground">
-            Comprehensive overview of emissions data from all three scopes
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">GHG Emissions Overview</h1>
+          <p className="text-muted-foreground mt-1">
+            Comprehensive environment impact monitoring & target tracking
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setIsTargetDialogOpen(true)}>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setIsTargetDialogOpen(true)}
+            className="hidden sm:flex"
+          >
             <Target className="mr-2 h-4 w-4" />
-            Set Target
+            Set Reduction Target
           </Button>
-          <Activity className="h-8 w-8 text-muted-foreground" />
         </div>
       </div>
 
       {/* Overall Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-200 dark:border-amber-800">
+        <Card className="bg-gradient-to-br from-amber-50/50 to-orange-50/50 dark:from-amber-950/10 dark:to-orange-950/10 border-amber-100 dark:border-amber-900 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-amber-900 dark:text-amber-100">
+            <CardTitle className="text-sm font-medium text-amber-950 dark:text-amber-50">
               Total GHG Emissions
             </CardTitle>
-            <Flame className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <Flame className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-900 dark:text-amber-100">
               {formatNumber(overallTotals.totalEmissions, 2)}
             </div>
-            <p className="text-xs text-amber-600 dark:text-amber-400">tCO2eq across all scopes</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">tCO2eq across all scopes</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800">
+        <Card className="bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:from-blue-950/10 dark:to-indigo-950/10 border-blue-100 dark:border-blue-900 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-blue-900 dark:text-blue-100">
+            <CardTitle className="text-sm font-medium text-blue-950 dark:text-blue-50">
               Total Energy Consumption
             </CardTitle>
-            <Zap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <Zap className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
               {formatNumber(overallTotals.totalEnergy, 2)}
             </div>
-            <p className="text-xs text-blue-600 dark:text-blue-400">MJ across all scopes</p>
+            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">MJ across all scopes</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-green-200 dark:border-green-800">
+        <Card className="bg-gradient-to-br from-emerald-50/50 to-green-50/50 dark:from-emerald-950/10 dark:to-green-950/10 border-emerald-100 dark:border-emerald-900 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-green-900 dark:text-green-100">
+            <CardTitle className="text-sm font-medium text-emerald-950 dark:text-emerald-50">
               Total Records
             </CardTitle>
             <BarChart3 className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -653,27 +692,27 @@ export default function GHGContent() {
       </div>
 
       {/* Scope-by-Scope Breakdown */}
-      <Tabs defaultValue="scope1" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="scope1" className="gap-2">
-            <Flame className="h-4 w-4" />
-            Scope 1
-          </TabsTrigger>
-          <TabsTrigger value="scope2-location" className="gap-2">
-            <Zap className="h-4 w-4" />
-            Scope 2 Location
-          </TabsTrigger>
-          <TabsTrigger value="scope2-market" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            Scope 2 Market
-          </TabsTrigger>
-          <TabsTrigger value="combined-location" className="gap-2">
+      <Tabs defaultValue="combined-location" className="w-full">
+        <TabsList className="grid w-full grid-cols-5 p-1 bg-muted/50">
+          <TabsTrigger value="combined-location" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-950 data-[state=active]:shadow-sm">
             <Activity className="h-4 w-4" />
             Combined Location
           </TabsTrigger>
-          <TabsTrigger value="combined-market" className="gap-2">
+          <TabsTrigger value="combined-market" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-950 data-[state=active]:shadow-sm">
             <Activity className="h-4 w-4" />
             Combined Market
+          </TabsTrigger>
+          <TabsTrigger value="scope1" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-950 data-[state=active]:shadow-sm">
+            <Flame className="h-4 w-4" />
+            Scope 1
+          </TabsTrigger>
+          <TabsTrigger value="scope2-location" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-950 data-[state=active]:shadow-sm">
+            <Zap className="h-4 w-4" />
+            Scope 2 Location
+          </TabsTrigger>
+          <TabsTrigger value="scope2-market" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-950 data-[state=active]:shadow-sm">
+            <Building2 className="h-4 w-4" />
+            Scope 2 Market
           </TabsTrigger>
         </TabsList>
 
@@ -949,7 +988,8 @@ export default function GHGContent() {
             <CardContent>
               <ChartContainer config={{
                 actual: { label: 'Actual Emissions', color: '#3b82f6' },
-                projection: { label: 'Target Path', color: '#f59e0b' }
+                projection: { label: 'Target Path', color: '#f59e0b' },
+                difference: { label: 'Variance (Actual - Target)', color: '#ef4444' }
               }} className="h-[300px] w-full">
                 <ComposedChart data={getProjectionData(combinedLocationByYear)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -959,6 +999,8 @@ export default function GHGContent() {
                   <Legend />
                   <Bar dataKey="actual" fill="#3b82f6" name="Actual Emissions" barSize={40} />
                   <Line type="monotone" dataKey="projection" stroke="#f59e0b" strokeWidth={2} name="Target Path" dot={{ r: 4 }} />
+                  {/* Hidden line to show difference in tooltip */}
+                  <Line dataKey="difference" stroke="transparent" dot={false} strokeWidth={0} name="Variance" />
                 </ComposedChart>
               </ChartContainer>
             </CardContent>
@@ -1005,7 +1047,8 @@ export default function GHGContent() {
             <CardContent>
               <ChartContainer config={{
                 actual: { label: 'Actual Emissions', color: '#22c55e' },
-                projection: { label: 'Target Path', color: '#f59e0b' }
+                projection: { label: 'Target Path', color: '#f59e0b' },
+                difference: { label: 'Variance (Actual - Target)', color: '#ef4444' }
               }} className="h-[300px] w-full">
                 <ComposedChart data={getProjectionData(combinedMarketByYear)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -1015,6 +1058,8 @@ export default function GHGContent() {
                   <Legend />
                   <Bar dataKey="actual" fill="#22c55e" name="Actual Emissions" barSize={40} />
                   <Line type="monotone" dataKey="projection" stroke="#f59e0b" strokeWidth={2} name="Target Path" dot={{ r: 4 }} />
+                  {/* Hidden line to show difference in tooltip */}
+                  <Line dataKey="difference" stroke="transparent" dot={false} strokeWidth={0} name="Variance" />
                 </ComposedChart>
               </ChartContainer>
             </CardContent>
@@ -1064,15 +1109,28 @@ export default function GHGContent() {
         </Button>
       </div>
       {/* Target Setting Dialog */}
+      {/* Target Setting Dialog */}
       <Dialog open={isTargetDialogOpen} onOpenChange={setIsTargetDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Set GHG Emission Target</DialogTitle>
+            <DialogTitle>Set Emission Reduction Activity</DialogTitle>
             <DialogDescription>
-              Set your target year and emission goal. This will be visualized in the combined charts.
+              Define your reduction goals based on a baseline year.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="baseline-year" className="text-right">
+                Baseline Year
+              </Label>
+              <Input
+                id="baseline-year"
+                type="number"
+                value={baselineYear}
+                onChange={(e) => setBaselineYear(Number(e.target.value))}
+                className="col-span-3"
+              />
+            </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="target-year" className="text-right">
                 Target Year
@@ -1086,20 +1144,22 @@ export default function GHGContent() {
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="target-emission" className="text-right">
-                Target Emission (tCO2eq)
+              <Label htmlFor="target-reduction" className="text-right">
+                Reduction (%)
               </Label>
               <Input
-                id="target-emission"
+                id="target-reduction"
                 type="number"
-                value={targetEmission}
-                onChange={(e) => setTargetEmission(Number(e.target.value))}
+                min="0"
+                max="100"
+                value={targetReduction}
+                onChange={(e) => setTargetReduction(Number(e.target.value))}
                 className="col-span-3"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={handleSaveTarget}>Save Target</Button>
+            <Button onClick={handleSaveTarget}>Save Reduction Target</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
